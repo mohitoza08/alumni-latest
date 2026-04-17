@@ -28,6 +28,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { title, description, start_date, location, max_attendees, is_virtual, virtual_link, event_type, status } =
       body
 
+    // Check if user is the organizer or admin
+    const eventCheck = await query(
+      `SELECT organizer_id FROM events WHERE id = $1 AND college_id = $2`,
+      [eventId, user.college_id],
+    )
+
+    if (eventCheck.length === 0) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 })
+    }
+
+    const isOrganizer = eventCheck[0].organizer_id === user.id
+    const isAdmin = user.role === "admin"
+
+    if (!isOrganizer && !isAdmin) {
+      return NextResponse.json({ error: "Only event organizer or admin can edit this event" }, { status: 403 })
+    }
+
     console.log("[v0] Updating event:", eventId, body)
 
     const result = await query(
@@ -71,6 +88,23 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     const { id: eventId } = await params
+
+    // Check if user is the organizer or admin
+    const eventCheck = await query(
+      `SELECT organizer_id FROM events WHERE id = $1 AND college_id = $2`,
+      [eventId, user.college_id],
+    )
+
+    if (eventCheck.length === 0) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 })
+    }
+
+    const isOrganizer = eventCheck[0].organizer_id === user.id
+    const isAdmin = user.role === "admin"
+
+    if (!isOrganizer && !isAdmin) {
+      return NextResponse.json({ error: "Only event organizer or admin can delete this event" }, { status: 403 })
+    }
 
     console.log("[v0] Deleting event:", eventId)
 

@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
 
     // Create session
     const session = await createSession(user.id)
+    console.log("[v0] Login: Session created with token:", session.token.substring(0, 20) + "...")
 
     // Set cookie
     const cookieStore = await cookies()

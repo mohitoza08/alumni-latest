@@ -88,6 +88,8 @@ export default function AlumniMentorshipPage() {
     if (!confirm("Mark this mentorship as completed?")) return
 
     try {
+      console.log("[v0] Marking mentorship as complete:", requestId)
+
       const response = await fetch(`/api/mentorship/requests/${requestId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -95,12 +97,22 @@ export default function AlumniMentorshipPage() {
         body: JSON.stringify({ status: "completed" }),
       })
 
-      if (response.ok) {
-        await mutate()
-        alert("Mentorship marked as completed!")
+      console.log("[v0] Complete response status:", response.status)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("[v0] Complete failed:", errorData)
+        alert(`Failed to mark as completed: ${errorData.error || "Unknown error"}`)
+        return
       }
+
+      const data = await response.json()
+      console.log("[v0] Completed successfully:", data)
+
+      await mutate()
+      alert("Mentorship marked as completed successfully!")
     } catch (error) {
-      console.error("Failed to complete mentorship:", error)
+      console.error("[v0] Failed to complete mentorship:", error)
       alert("Failed to complete mentorship. Please try again.")
     }
   }

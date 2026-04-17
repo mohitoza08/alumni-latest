@@ -19,7 +19,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Calendar, MapPin, Users, Video, Clock, Plus, Search, Filter, Edit, Trash2, MoreVertical } from "lucide-react"
+import { Calendar, MapPin, Users, Video, Clock, Plus, Search, Filter, Edit, Trash2, MoreVertical, Eye, X, User } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 interface Event {
   id: number
@@ -46,12 +47,7 @@ interface EventsClientProps {
 }
 
 export function EventsClient({ initialEvents, userId, userRole }: EventsClientProps) {
-  const fetcher = (url: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : ""
-    return fetch(url, {
-      headers: { "x-session-token": token || "" },
-    }).then((res) => res.json())
-  }
+  const fetcher = (url: string) => fetch(url, { credentials: "include" }).then((res) => res.json())
 
   const { data, mutate } = useSWR("/api/events", fetcher, {
     fallbackData: { events: initialEvents },
@@ -67,6 +63,9 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isParticipantsDialogOpen, setIsParticipantsDialogOpen] = useState(false)
+  const [participants, setParticipants] = useState<any[]>([])
+  const [loadingParticipants, setLoadingParticipants] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
 
   // Form state
@@ -104,12 +103,11 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
 
   const handleRegister = async (eventId: number, isCurrentlyRegistered: boolean) => {
     try {
-      const token = localStorage.getItem("session_token") || ""
       const method = isCurrentlyRegistered ? "DELETE" : "POST"
 
       const response = await fetch(`/api/events/${eventId}/register`, {
         method,
-        headers: { "x-session-token": token },
+        credentials: "include",
       })
 
       if (response.ok) {
@@ -161,14 +159,67 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
     setIsDeleteDialogOpen(true)
   }
 
+  const handleViewParticipants = async (event: Event) => {
+    setSelectedEvent(event)
+    setIsParticipantsDialogOpen(true)
+    setLoadingParticipants(true)
+    
+    try {
+      const response = await fetch(`/api/events/${event.id}/participants`, {
+        credentials: "include",
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setParticipants(data.participants || [])
+      } else {
+        const data = await response.json()
+        alert(data.error || "Failed to load participants")
+        setParticipants([])
+      }
+    } catch (error) {
+      console.error("[v0] Fetch participants error:", error)
+      setParticipants([])
+    } finally {
+      setLoadingParticipants(false)
+    }
+  }
+
+  const handleRemoveParticipant = async (participantId: number) => {
+    if (!selectedEvent) return
+    if (!confirm("Remove this participant from the event?")) return
+    
+    try {
+      const response = await fetch(
+        `/api/events/${selectedEvent.id}/participants?participant_id=${participantId}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      )
+      
+      if (response.ok) {
+        await mutate()
+        const data = await response.json()
+        setParticipants(participants.filter(p => p.user_id !== participantId))
+        alert(data.message || "Participant removed")
+      } else {
+        const data = await response.json()
+        alert(data.error || "Failed to remove participant")
+      }
+    } catch (error) {
+      console.error("[v0] Remove participant error:", error)
+      alert("Failed to remove participant")
+    }
+  }
+
   const handleDelete = async () => {
     if (!selectedEvent) return
-    const token = localStorage.getItem("session_token") || ""
 
     try {
       const response = await fetch(`/api/events/${selectedEvent.id}`, {
         method: "DELETE",
-        headers: { "x-session-token": token },
+        credentials: "include",
       })
 
       if (response.ok) {
@@ -182,14 +233,11 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
   }
 
   const handleCreateEvent = async () => {
-    const token = localStorage.getItem("session_token") || ""
     try {
       const response = await fetch("/api/events", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-session-token": token,
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           title,
           description,
@@ -216,15 +264,12 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
 
   const handleEditEvent = async () => {
     if (!selectedEvent) return
-    const token = localStorage.getItem("session_token") || ""
 
     try {
       const response = await fetch(`/api/events/${selectedEvent.id}`, {
         method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-session-token": token,
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           title,
           description,
@@ -444,6 +489,10 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleViewParticipants(event)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Participants ({event.attendees_count || 0})
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleEditClick(event)}>
                           <Edit className="h-4 w-4 mr-2" />
                           Edit Event
@@ -651,6 +700,68 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
               Delete
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Participants Dialog */}
+      <Dialog open={isParticipantsDialogOpen} onOpenChange={setIsParticipantsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Event Participants</DialogTitle>
+            <DialogDescription>
+              {selectedEvent?.title} - {participants.length} registered
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingParticipants ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : participants.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No participants registered yet
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {participants.map((participant) => (
+                <div
+                  key={participant.id}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={participant.profile_picture} />
+                      <AvatarFallback>
+                        {participant.first_name?.charAt(0) || "U"}
+                        {participant.last_name?.charAt(0) || ""}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{participant.name}</p>
+                      <p className="text-sm text-muted-foreground">{participant.email}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {participant.phone && `Phone: ${participant.phone}`}
+                        {participant.role && ` | Role: ${participant.role}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={participant.status === "registered" ? "default" : "secondary"}>
+                      {participant.status}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveParticipant(participant.user_id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

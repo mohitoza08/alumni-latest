@@ -1,71 +1,44 @@
-import { redirect } from "next/navigation"
+"use client"
+
 import { Sidebar } from "@/components/layout/sidebar"
-import { StatsCard } from "@/components/dashboard/stats-card"
+import { DashboardStats } from "@/components/dashboard/realtime-stats"
 import { QuickActions } from "@/components/dashboard/quick-actions"
-import { getServerSession } from "@/lib/session-helper"
-import { Users, Calendar, BookOpen, Heart, MessageSquare, DollarSign } from "lucide-react"
-import { query } from "@/lib/db"
+import { useAuth } from "@/components/layout/auth-checker"
+import useSWR from "swr"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Calendar, BookOpen, Heart, MessageSquare, DollarSign, Trophy, Plus, UserPlus, CheckCircle, XCircle, Clock } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
-export const dynamic = "force-dynamic"
+const fetcher = (url: string) => {
+  const token = localStorage.getItem("session_token") || ""
+  return fetch(url, {
+    credentials: "include",
+    headers: { "x-session-token": token },
+  }).then((r) => r.json())
+}
 
-export default async function AlumniDashboard() {
-  const user = await getServerSession()
+export default function AlumniDashboard() {
+  const { user, isLoading: authLoading } = useAuth("alumni")
 
-  if (!user || user.role !== "alumni") {
-    redirect("/")
+  const { data: activityData, error: activityError, isLoading: activityLoading } = useSWR("/api/activity/alumni", fetcher, {
+    refreshInterval: 10000,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+  })
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+      </div>
+    )
   }
 
-  const [mentorshipStats, eventsStats, postsStats, donationStats] = await Promise.all([
-    query(`SELECT COUNT(*) as count FROM mentorships WHERE mentor_id = $1 AND status = 'active'`, [user.id]),
-    query(
-      `SELECT COUNT(*) as count FROM events WHERE organizer_id = $1 AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)`,
-      [user.id],
-    ),
-    query(`SELECT COUNT(*) as count FROM community_posts WHERE author_id = $1`, [user.id]),
-    query(`SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE donor_id = $1 AND status = 'completed'`, [
-      user.id,
-    ]),
-  ])
-
-  const studentsMentored = Number(mentorshipStats[0]?.count || 0)
-  const eventsHosted = Number(eventsStats[0]?.count || 0)
-  const communityPosts = Number(postsStats[0]?.count || 0)
-  const donationsTotal = Number(donationStats[0]?.total || 0)
-
-  const recentActivities = [
-    {
-      id: "1",
-      type: "mentorship" as const,
-      title: "New Mentorship Request",
-      description: "John Doe wants to connect with you",
-      timestamp: new Date("2024-12-15"),
-      user: { name: "John Doe", avatar: "" },
-      status: "pending" as const,
-    },
-    {
-      id: "2",
-      type: "event" as const,
-      title: "Alumni Networking Event",
-      description: "Monthly networking meetup",
-      timestamp: new Date("2024-12-12"),
-      status: "completed" as const,
-    },
-    {
-      id: "3",
-      type: "post" as const,
-      title: "Shared Career Advice",
-      description: "Your post got 15 likes",
-      timestamp: new Date("2024-12-10"),
-    },
-    {
-      id: "4",
-      type: "achievement" as const,
-      title: "Mentor Badge Earned",
-      description: "Completed 10 mentorship sessions",
-      timestamp: new Date("2024-12-08"),
-      status: "completed" as const,
-    },
-  ]
+  const userName = `${user.first_name} ${user.last_name}`
+  const activities = activityData?.activities || []
+  const errorMsg = activityData?.error
+  
+  console.log("[v0] Alumni Dashboard - activityData:", activityData)
 
   const quickActions = [
     {
@@ -95,15 +68,48 @@ export default async function AlumniDashboard() {
     },
   ]
 
-  const userName = `${user.first_name} ${user.last_name}`
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case "mentorship":
+        return <BookOpen className="h-4 w-4 text-blue-500" />
+      case "event":
+        return <Plus className="h-4 w-4 text-green-500" />
+      case "event_registered":
+        return <Calendar className="h-4 w-4 text-green-500" />
+      case "donation":
+        return <DollarSign className="h-4 w-4 text-red-500" />
+      case "post":
+        return <MessageSquare className="h-4 w-4 text-purple-500" />
+      default:
+        return <Trophy className="h-4 w-4 text-yellow-500" />
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "pending":
+        return <Badge variant="secondary" className="text-xs"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
+      case "accepted":
+        return <Badge variant="default" className="bg-green-500 text-xs"><CheckCircle className="h-3 w-3 mr-1" />Active</Badge>
+      case "rejected":
+        return <Badge variant="destructive" className="text-xs"><XCircle className="h-3 w-3 mr-1" />Declined</Badge>
+      case "completed":
+        return <Badge variant="default" className="bg-blue-500 text-xs"><Trophy className="h-3 w-3 mr-1" />Completed</Badge>
+      case "verified":
+        return <Badge variant="default" className="bg-green-500 text-xs">Verified</Badge>
+      case "pending_verification":
+        return <Badge variant="secondary" className="text-xs">Pending</Badge>
+      default:
+        return null
+    }
+  }
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar userRole={user.role} userName={userName} userBadges={[]} userPoints={0} />
+      <Sidebar userRole={user.role} userName={userName} userBadges={user.badges || []} userPoints={user.points || 0} />
 
       <main className="flex-1 overflow-y-auto">
         <div className="p-6 lg:p-8">
-          {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground">Welcome back, {userName}!</h1>
             <p className="text-muted-foreground">
@@ -113,42 +119,59 @@ export default async function AlumniDashboard() {
             </p>
           </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <StatsCard
-              title="Students Mentored"
-              value={studentsMentored}
-              description="Active mentorships"
-              icon={Users}
-              trend={{ value: 12, isPositive: true }}
-            />
-            <StatsCard
-              title="Events Hosted"
-              value={eventsHosted}
-              description="This year"
-              icon={Calendar}
-              trend={{ value: 1, isPositive: true }}
-            />
-            <StatsCard
-              title="Community Posts"
-              value={communityPosts}
-              description="Total contributions"
-              icon={MessageSquare}
-            />
-            <StatsCard
-              title="Donations Made"
-              value={`$${donationsTotal.toLocaleString()}`}
-              description="Total contributed"
-              icon={DollarSign}
-              trend={{ value: 25, isPositive: true }}
-            />
-          </div>
+          <DashboardStats userRole="alumni" />
 
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
             <div className="space-y-6">
               <QuickActions actions={quickActions} />
             </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  My Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {activityLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-primary border-r-transparent"></div>
+                  </div>
+                ) : errorMsg ? (
+                  <div className="text-center py-8">
+                    <p className="text-destructive">Error: {errorMsg}</p>
+                    <p className="text-sm text-muted-foreground mt-1">Please check console for details</p>
+                  </div>
+                ) : activities.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No activity yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Start by mentoring students or hosting events!</p>
+                    <p className="text-xs text-muted-foreground mt-2">User ID: {user.id}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {activities.map((activity: any, index: number) => (
+                      <div key={activity.id || index} className="flex items-start gap-3 pb-3 border-b last:border-0">
+                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                          {getActivityIcon(activity.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{activity.title}</p>
+                          <p className="text-xs text-muted-foreground">{activity.description}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {getStatusBadge(activity.status)}
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(activity.timestamp).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </main>

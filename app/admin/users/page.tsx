@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -28,7 +29,7 @@ import { AuthChecker } from "@/components/layout/auth-checker"
 import useSWR from "swr"
 import { format } from "date-fns"
 import { BanUserDialog, SuspendUserDialog, DeleteUserDialog } from "@/components/admin/user-action-dialogs"
-import { Search, UserCheck, UserX, Shield, Edit, MoreVertical, Ban, Clock, Trash2, CheckCircle } from "lucide-react"
+import { Search, UserCheck, UserX, Shield, Edit, MoreVertical, Ban, Clock, Trash2, CheckCircle, Check } from "lucide-react"
 
 const fetcher = async (url: string) => {
   const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : ""
@@ -72,6 +73,10 @@ export default function AdminUsersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState("All")
   const [statusFilter, setStatusFilter] = useState("All")
+
+  // Bulk selection state
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   // Dialog states
   const [selectedUser, setSelectedUser] = useState<any | null>(null)
@@ -151,6 +156,50 @@ export default function AdminUsersPage() {
     }
   }
 
+  const toggleUserSelection = (userId: string) => {
+    const newSelected = new Set(selectedUsers)
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId)
+    } else {
+      newSelected.add(userId)
+    }
+    setSelectedUsers(newSelected)
+  }
+
+  const selectAllUsers = () => {
+    if (selectedUsers.size === filteredUsers.length) {
+      setSelectedUsers(new Set())
+    } else {
+      setSelectedUsers(new Set(filteredUsers.map((u) => u.id)))
+    }
+  }
+
+  const handleBulkActivate = async () => {
+    if (selectedUsers.size === 0) return
+    
+    setBulkLoading(true)
+    try {
+      const token = localStorage.getItem("session_token") || ""
+      const response = await fetch("/api/users/bulk-activate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-session-token": token,
+        },
+        body: JSON.stringify({ user_ids: Array.from(selectedUsers) }),
+      })
+
+      if (response.ok) {
+        setSelectedUsers(new Set())
+        mutate()
+      }
+    } catch (error) {
+      console.error("Error activating users:", error)
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
@@ -171,6 +220,11 @@ export default function AdminUsersPage() {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
+            <Checkbox
+              checked={selectedUsers.has(userData.id)}
+              onCheckedChange={() => toggleUserSelection(userData.id)}
+              className="mr-2"
+            />
             <Avatar>
               <AvatarImage src={userData.profileImage || "/placeholder.svg"} />
               <AvatarFallback>{userData.name.charAt(0)}</AvatarFallback>
@@ -440,6 +494,36 @@ export default function AdminUsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Bulk Actions */}
+              {filteredUsers.length > 0 && (
+                <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={selectAllUsers}
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      {selectedUsers.size === filteredUsers.length ? "Deselect All" : "Select All"}
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {selectedUsers.size} of {filteredUsers.length} selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleBulkActivate}
+                      disabled={selectedUsers.size === 0 || bulkLoading}
+                    >
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      {bulkLoading ? "Activating..." : `Accept Selected (${selectedUsers.size})`}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Users Tabs */}

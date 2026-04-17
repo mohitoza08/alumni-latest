@@ -1,11 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "@/lib/session-helper"
 import { createMentorshipRequest, getMentorshipRequests } from "@/lib/db-helpers"
+import { getUserBySession } from "@/lib/auth-db"
 
 export const dynamic = "force-dynamic"
 export async function GET(req: NextRequest) {
   try {
-    const user = await getServerSession()
+    // Try session helper first (checks cookies), then header token
+    let user = await getServerSession()
+    
+    if (!user) {
+      const headerToken = req.headers.get("x-session-token")
+      if (headerToken) {
+        user = await getUserBySession(headerToken)
+      }
+    }
+    
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -42,7 +52,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getServerSession()
+    // Try session helper first (checks cookies), then header token
+    let user = await getServerSession()
+    
+    if (!user) {
+      const headerToken = req.headers.get("x-session-token")
+      if (headerToken) {
+        user = await getUserBySession(headerToken)
+      }
+    }
+    
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }

@@ -76,15 +76,15 @@ export default function AdminCommunityPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
             <Avatar>
-              <AvatarImage src={post.authorAvatar || "/placeholder.svg"} />
-              <AvatarFallback>{post.authorName?.charAt(0) || "U"}</AvatarFallback>
+              <AvatarImage src={post.author_avatar || post.authorAvatar || "/placeholder.svg"} />
+              <AvatarFallback>{(post.author_name || post.authorName || "U").charAt(0)}</AvatarFallback>
             </Avatar>
             <div>
               <CardTitle className="text-lg">{post.title}</CardTitle>
               <CardDescription className="flex items-center gap-2">
-                <span>{post.authorName}</span>
-                <Badge variant="secondary" className={getRoleColor(post.authorRole)}>
-                  {post.authorRole}
+                <span>{post.author_name || post.authorName}</span>
+                <Badge variant="secondary" className={getRoleColor(post.author_role || post.authorRole || "student")}>
+                  {post.author_role || post.authorRole || "student"}
                 </Badge>
                 {(post.isPinned || post.is_pinned) && <Pin className="h-4 w-4 text-primary" />}
                 {(post.isReported || post.is_reported) && <Flag className="h-4 w-4 text-red-500" />}
@@ -92,7 +92,7 @@ export default function AdminCommunityPage() {
             </div>
           </div>
           <Badge variant="outline" className="text-xs">
-            {post.category}
+            {post.category || "general"}
           </Badge>
         </div>
       </CardHeader>
@@ -103,15 +103,15 @@ export default function AdminCommunityPage() {
           <div className="flex items-center space-x-4 text-sm text-muted-foreground">
             <div className="flex items-center space-x-1">
               <Heart className="h-4 w-4" />
-              <span>{post.likes || 0}</span>
+              <span>{post.likes_count || post.likes || 0}</span>
             </div>
             <div className="flex items-center space-x-1">
               <MessageSquare className="h-4 w-4" />
-              <span>{post.comments?.length || 0}</span>
+              <span>{post.comments_count || post.comments?.length || 0}</span>
             </div>
             <div className="flex items-center space-x-1">
               <Calendar className="h-4 w-4" />
-              <span>{new Date(post.createdAt || post.created_at).toLocaleDateString()}</span>
+              <span>{new Date(post.createdAt || post.created_at || Date.now()).toLocaleDateString()}</span>
             </div>
           </div>
 
@@ -123,6 +123,29 @@ export default function AdminCommunityPage() {
             ))}
           </div>
         </div>
+
+        {showActions && post.comments && post.comments.length > 0 && (
+          <div className="mt-4 pt-4 border-t">
+            <p className="text-sm font-medium mb-2">Recent Comments:</p>
+            <div className="space-y-2">
+              {post.comments.slice(0, 3).map((comment: any) => (
+                <div key={comment.id} className="flex items-start gap-2 text-sm bg-muted/50 p-2 rounded">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={comment.author_avatar || comment.authorAvatar || "/placeholder.svg"} />
+                    <AvatarFallback>{(comment.author_name || comment.authorName || "U").charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="font-medium text-xs">
+                      {comment.author_name || comment.authorName}
+                      <span className="text-muted-foreground ml-2">({comment.author_role || comment.authorRole || "student"})</span>
+                    </p>
+                    <p className="text-muted-foreground text-xs line-clamp-2">{comment.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {showActions && (
           <div className="flex items-center space-x-2">
@@ -204,7 +227,7 @@ export default function AdminCommunityPage() {
                       <p className="text-sm font-medium text-muted-foreground">Total Engagement</p>
                       <p className="text-2xl font-bold">
                         {posts.reduce(
-                          (sum: number, post: any) => sum + (post.likes || 0) + (post.comments?.length || 0),
+                          (sum: number, post: any) => sum + (post.likes_count || post.likes || 0) + (post.comments_count || post.comments?.length || 0),
                           0,
                         )}
                       </p>

@@ -6,12 +6,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 
-const fetcher = (url: string) => {
-  const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : ""
-  return fetch(url, {
-    headers: { "x-session-token": token || "" },
-  }).then((r) => r.json())
-}
+const fetcher = (url: string) => fetch(url, { credentials: "include" }).then((r) => r.json())
 
 interface AuthCheckerProps {
   requiredRole?: "admin" | "alumni" | "student"

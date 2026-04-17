@@ -37,6 +37,29 @@ export async function GET(req: NextRequest) {
         )
         const isRegistered = registrationResult.length > 0
 
+        // Fetch participants
+        const participantsResult = await query(
+          `SELECT er.*, u.first_name, u.last_name, u.email, u.role, u.profile_picture
+           FROM event_registrations er
+           JOIN users u ON er.user_id = u.id
+           WHERE er.event_id = $1
+           ORDER BY er.created_at ASC`,
+          [e.id],
+        )
+        const participants = participantsResult.map((p: any) => ({
+          id: p.id,
+          user_id: p.user_id,
+          name: `${p.first_name} ${p.last_name}`,
+          email: p.email,
+          role: p.role,
+          profile_picture: p.profile_picture,
+          status: p.status,
+          registered_at: p.created_at instanceof Date ? p.created_at.toISOString() : p.created_at,
+        }))
+
+        // Check if current user is organizer or admin for edit permissions
+        const canEdit = user.role === "admin" || user.id === e.organizer_id
+
         return {
           id: e.id,
           title: e.title,
@@ -54,8 +77,8 @@ export async function GET(req: NextRequest) {
           virtual_link: e.virtual_link,
           capacity: e.max_attendees || 0,
           max_attendees: e.max_attendees || 0,
-          registeredCount: Number(e.attendees_count) || 0,
-          attendees_count: Number(e.attendees_count) || 0,
+          registeredCount: participants.length || 0,
+          attendees_count: participants.length || 0,
           organizerId: e.organizer_id,
           organizer_id: e.organizer_id,
           organizerName: organizer ? `${organizer.first_name} ${organizer.last_name}` : "Unknown",
@@ -78,7 +101,9 @@ export async function GET(req: NextRequest) {
           createdAt: e.created_at instanceof Date ? e.created_at.toISOString() : e.created_at,
           created_at: e.created_at instanceof Date ? e.created_at.toISOString() : e.created_at,
           isRegistered,
-          attendees: [],
+          attendees: participants,
+          participants: participants,
+          canEdit,
           isPremium: false,
           paymentRequired: false,
           tags: [],
@@ -86,7 +111,7 @@ export async function GET(req: NextRequest) {
       }),
     )
 
-    console.log("[v0] Returning events with complete field mapping:", eventsWithDetails.length)
+    console.log("[v0] Returning events with participants:", eventsWithDetails.length)
     return NextResponse.json({ events: eventsWithDetails })
   } catch (error) {
     console.error("[v0] Get events error:", error)

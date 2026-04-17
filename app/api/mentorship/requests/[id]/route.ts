@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "@/lib/session-helper"
 import { query } from "@/lib/db"
 import { deleteMentorshipRequest } from "@/lib/db-helpers"
+
 export const dynamic = "force-dynamic"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -21,13 +22,45 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const userId = Number(user.id)
 
-    const result = await query(
-      `UPDATE mentorship_requests 
-       SET status = $1, response_message = $2, updated_at = NOW()
-       WHERE id = $3 AND mentor_id = $4
-       RETURNING *`,
-      [status, response_message || null, requestId, userId],
-    )
+    // First get the request to check authorization
+    const checkResult = await query(`SELECT * FROM mentorship_requests WHERE id = $1`, [requestId])
+
+    if (checkResult.length === 0) {
+      return NextResponse.json({ error: "Request not found" }, { status: 404 })
+    }
+
+    const requestData = checkResult[0]
+    const isMentor = Number(requestData.mentor_id) === userId
+    const isMentee = Number(requestData.mentee_id) === userId
+
+    if (!isMentor && !isMentee) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    if (["accepted", "rejected", "cancelled"].includes(status) && !isMentor) {
+      return NextResponse.json({ error: "Only mentor can accept/reject/cancel requests" }, { status: 403 })
+    }
+
+    // For "completed", allow both mentor and mentee to update
+    // For other statuses, only mentor can update
+    let result;
+    if (status === "completed") {
+      result = await query(
+        `UPDATE mentorship_requests 
+         SET status = $1, response_message = $2, updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [status, response_message || null, requestId],
+      )
+    } else {
+      result = await query(
+        `UPDATE mentorship_requests 
+         SET status = $1, response_message = $2, updated_at = NOW()
+         WHERE id = $3 AND mentor_id = $4
+         RETURNING *`,
+        [status, response_message || null, requestId, userId],
+      )
+    }
 
     if (result.length === 0) {
       return NextResponse.json({ error: "Request not found or unauthorized" }, { status: 404 })
