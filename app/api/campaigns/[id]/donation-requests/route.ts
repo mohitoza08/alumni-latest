@@ -4,8 +4,6 @@ import { getServerSession } from "@/lib/session-helper"
 
 export const dynamic = "force-dynamic"
 import { getUserBySession } from "@/lib/auth-db"
-import fs from "fs"
-import path from "path"
 
 async function getSessionUser() {
   // First try cookie-based session
@@ -113,27 +111,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       isAnonymous = formData.get("isAnonymous") === "true"
       paymentMethod = formData.get("paymentMethod")?.toString() || "UPI"
       
-      // Handle file upload - save to uploads folder
+      // Handle file upload - Vercel is read-only, just store a marker
       const receiptFile = formData.get("receipt") as File | null
       if (receiptFile && receiptFile.size > 0) {
-        // Save file to public/uploads folder
-        const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
-        
-        // Ensure uploads directory exists
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true })
-        }
-        
-        // Generate unique filename
-        const ext = path.extname(receiptFile.name)
-        const filename = `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`
-        const filepath = path.join(uploadsDir, filename)
-        
-        // Convert file to buffer and save
-        const buffer = Buffer.from(await receiptFile.arrayBuffer())
-        fs.writeFileSync(filepath, buffer)
-        
-        receiptUrl = `/uploads/${filename}`
+        receiptUrl = "receipt_stored"
       }
     } else {
       // Handle JSON (without file)

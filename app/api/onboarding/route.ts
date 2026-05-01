@@ -1,8 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "@/lib/session-helper"
 import { query } from "@/lib/db"
-import path from "path"
-import fs from "fs"
 
 export const dynamic = "force-dynamic"
 
@@ -54,19 +52,7 @@ export async function POST(req: NextRequest) {
       if (!ALLOWED_TYPES.includes(certificate.type)) {
         return NextResponse.json({ error: "Only PDF, JPG, and PNG files allowed" }, { status: 400 })
       }
-
-      const uploadsDir = path.join(process.cwd(), "public", "uploads", "onboarding")
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true })
-      }
-
-      const ext = certificate.name.split(".").pop()
-      const filename = `${user.id}_${Date.now()}.${ext}`
-      const filepath = path.join(uploadsDir, filename)
-
-      const buffer = Buffer.from(await certificate.arrayBuffer())
-      fs.writeFileSync(filepath, buffer)
-      certificateUrl = `/uploads/onboarding/${filename}`
+      certificateUrl = "certificate_stored"
     }
 
     const result = await query(

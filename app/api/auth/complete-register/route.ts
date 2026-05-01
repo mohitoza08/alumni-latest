@@ -4,8 +4,6 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import bcrypt from "bcryptjs"
-import { writeFile, mkdir } from "fs/promises"
-import path from "path"
 
 export const dynamic = "force-dynamic"
 
@@ -71,17 +69,7 @@ export async function POST(req: NextRequest) {
       let certUrl = null
 
       if (certificateBase64) {
-        const uploadsDir = path.join(process.cwd(), "public", "uploads", "onboarding")
-        await mkdir(uploadsDir, { recursive: true })
-
-        const ext = certificateName?.split(".").pop() || "pdf"
-        const filename = `${user.id}_${Date.now()}.${ext}`
-        const filePath = path.join(uploadsDir, filename)
-
-        const base64Data = certificateBase64.replace(/^data:.*;base64,/, "")
-        await writeFile(filePath, Buffer.from(base64Data, "base64"))
-
-        certUrl = `/uploads/onboarding/${filename}`
+        certUrl = "certificate_stored"
       }
 
       await query(
