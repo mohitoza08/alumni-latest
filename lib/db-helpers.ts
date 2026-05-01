@@ -339,9 +339,9 @@ export async function createMentorshipRequest(data: {
   return result[0]
 }
 
-export async function getMentorshipRequests(user_id: number, as_mentor = false): Promise<any[]> {
+export async function getMentorshipRequests(user_id: number, as_mentor = false, status?: string): Promise<any[]> {
   const field = as_mentor ? "mentor_id" : "mentee_id"
-  const queryStr = `SELECT mr.*, 
+  let queryStr = `SELECT mr.*, 
        u1.first_name as mentee_first_name, u1.last_name as mentee_last_name,
        u1.profile_picture as mentee_profile_picture, u1.degree as mentee_degree,
        u1.major as mentee_department,
@@ -350,10 +350,18 @@ export async function getMentorshipRequests(user_id: number, as_mentor = false):
      FROM mentorship_requests mr
      JOIN users u1 ON mr.mentee_id = u1.id
      JOIN users u2 ON mr.mentor_id = u2.id
-     WHERE mr.${field} = $1
-     ORDER BY mr.created_at DESC`
+     WHERE mr.${field} = $1`
 
-  const result = await query<any>(queryStr, [user_id])
+  const params: any[] = [user_id]
+
+  if (status) {
+    params.push(status)
+    queryStr += ` AND mr.status = $${params.length}`
+  }
+
+  queryStr += ` ORDER BY mr.created_at DESC`
+
+  const result = await query<any>(queryStr, params)
   return result
 }
 
@@ -400,6 +408,7 @@ export interface Message {
   sender_id: number
   recipient_id: number
   mentorship_id?: number
+  conversation_id?: number
   subject?: string
   content: string
   is_read: boolean
@@ -420,15 +429,24 @@ export async function createMessage(data: {
   sender_id: number
   recipient_id: number
   mentorship_id?: number
+  conversation_id?: number
   subject?: string
   content: string
 }): Promise<Message> {
   const result = await query<Message>(
-    `INSERT INTO messages (sender_id, recipient_id, mentorship_id, subject, content)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO messages (sender_id, recipient_id, mentorship_id, conversation_id, subject, content)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [data.sender_id, data.recipient_id, data.mentorship_id || null, data.subject || null, data.content],
+    [data.sender_id, data.recipient_id, data.mentorship_id || null, data.conversation_id || null, data.subject || null, data.content],
   )
+  
+  if (data.conversation_id) {
+    await query(
+      `UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [data.conversation_id],
+    )
+  }
+  
   return result[0]
 }
 
@@ -481,6 +499,351 @@ export async function markMessageAsRead(message_id: number, user_id: number): Pr
   await query(`UPDATE messages SET is_read = true WHERE id = $1 AND recipient_id = $2`, [message_id, user_id])
 }
 
+export async function markConversationAsRead(conversation_id: number, user_id: number): Promise<void> {
+  await query(`UPDATE messages SET is_read = true WHERE conversation_id = $1 AND recipient_id = $2 AND is_read = false`, [conversation_id, user_id])
+}
+
+export async function getUnreadCount(userId: number, conversationId: number): Promise<number> {
+  const result = await query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM messages WHERE conversation_id = $1 AND recipient_id = $2 AND is_read = false`,
+    [conversationId, userId],
+  )
+  return Number(result[0]?.count || 0)
+}
+
+// Conversations
+export interface Conversation {
+  id: number
+  title?: string
+  created_by: number
+  college_id: number
+  is_archived: boolean
+  created_at: Date
+  updated_at: Date
+  other_user_id?: number
+  other_user_name?: string
+  other_user_picture?: string
+  other_user_role?: string
+  last_message?: string
+  last_message_at?: Date
+  unread_count?: number
+  is_mentorship_completed?: boolean
+  completed_at?: Date
+  mentorship_id?: number
+}
+
+export async function createConversation(data: {
+  title: string
+  created_by: number
+  college_id: number
+}): Promise<Conversation> {
+  const result = await query<Conversation>(
+    `INSERT INTO conversations (title, created_by, college_id)
+     VALUES ($1, $2, $3)
+     RETURNING *`,
+    [data.title, data.created_by, data.college_id],
+  )
+  return result[0]
+}
+
+export async function findOrCreateDirectConversation(
+  userId: number,
+  recipientId: number,
+  collegeId: number,
+  title: string,
+): Promise<Conversation> {
+  const existingResult = await query<any>(`
+    SELECT DISTINCT c.id, c.title, c.created_by, c.college_id, c.is_archived, c.created_at, c.updated_at
+    FROM conversations c
+    JOIN messages m ON m.conversation_id = c.id
+    WHERE c.college_id = $1
+      AND m.mentorship_id IS NULL
+      AND ((m.sender_id = $2 AND m.recipient_id = $3) OR (m.sender_id = $3 AND m.recipient_id = $2))
+    ORDER BY c.created_at DESC
+    LIMIT 1
+  `, [collegeId, userId, recipientId])
+
+  if (existingResult.length > 0) {
+    return {
+      id: existingResult[0].id,
+      title: existingResult[0].title,
+      created_by: existingResult[0].created_by,
+      college_id: existingResult[0].college_id,
+      is_archived: existingResult[0].is_archived,
+      created_at: existingResult[0].created_at,
+      updated_at: existingResult[0].updated_at,
+    }
+  }
+
+  return createConversation({ title, created_by: userId, college_id: collegeId })
+}
+
+export async function getActiveMentorshipConversations(userId: number, collegeId: number): Promise<Conversation[]> {
+  const result = await query<any>(`
+    SELECT DISTINCT ON (c.id)
+      c.id, c.title, c.created_by, c.college_id, c.is_archived, c.created_at, c.updated_at,
+      last_msg.content as last_message,
+      last_msg.created_at as last_message_at,
+      (SELECT COUNT(*) FROM messages um WHERE um.conversation_id = c.id AND um.recipient_id = $1 AND um.is_read = false) as unread_count,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN last_msg.recipient_id
+        ELSE last_msg.sender_id
+      END as other_user_id,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN u_other.first_name || ' ' || u_other.last_name
+        ELSE u_other.first_name || ' ' || u_other.last_name
+      END as other_user_name,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN u_other.profile_picture
+        ELSE u_other.profile_picture
+      END as other_user_picture,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN u_other.role
+        ELSE u_other.role
+      END as other_user_role
+    FROM conversations c
+    JOIN messages last_msg ON last_msg.conversation_id = c.id
+    LEFT JOIN users u_other ON u_other.id = (
+      CASE WHEN last_msg.sender_id = $1 THEN last_msg.recipient_id ELSE last_msg.sender_id END
+    )
+    WHERE c.college_id = $2
+      AND c.id IN (
+        SELECT DISTINCT c2.id FROM conversations c2
+        JOIN messages m2 ON m2.conversation_id = c2.id
+        WHERE m2.mentorship_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM mentorship_requests mr
+          WHERE mr.id = m2.mentorship_id AND mr.status = 'accepted'
+          AND (mr.mentor_id = $1 OR mr.mentee_id = $1)
+        )
+        UNION
+        SELECT DISTINCT c3.id FROM conversations c3
+        JOIN messages m3 ON m3.conversation_id = c3.id
+        WHERE m3.mentorship_id IS NULL
+        AND (m3.sender_id = $1 OR m3.recipient_id = $1)
+      )
+    ORDER BY c.id, last_msg.created_at DESC
+    LIMIT 50
+  `, [userId, collegeId])
+
+  return result.map((row) => ({
+    id: row.id,
+    title: row.title,
+    created_by: row.created_by,
+    college_id: row.college_id,
+    is_archived: row.is_archived,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    other_user_id: row.other_user_id,
+    other_user_name: row.other_user_name,
+    other_user_picture: row.other_user_picture,
+    other_user_role: row.other_user_role,
+    last_message: row.last_message,
+    last_message_at: row.last_message_at,
+    unread_count: Number(row.unread_count) || 0,
+  }))
+}
+
+export async function getConversations(userId: number, collegeId: number): Promise<Conversation[]> {
+  const result = await query<any>(`
+    SELECT DISTINCT ON (c.id)
+      c.id, c.title, c.created_by, c.college_id, c.is_archived, c.created_at, c.updated_at,
+      last_msg.content as last_message,
+      last_msg.created_at as last_message_at,
+      (SELECT COUNT(*) FROM messages um WHERE um.conversation_id = c.id AND um.recipient_id = $1 AND um.is_read = false) as unread_count,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN last_msg.recipient_id
+        ELSE last_msg.sender_id
+      END as other_user_id,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN u_other.first_name || ' ' || u_other.last_name
+        ELSE u_other.first_name || ' ' || u_other.last_name
+      END as other_user_name,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN u_other.profile_picture
+        ELSE u_other.profile_picture
+      END as other_user_picture,
+      CASE 
+        WHEN last_msg.sender_id = $1 THEN u_other.role
+        ELSE u_other.role
+      END as other_user_role
+    FROM conversations c
+    JOIN messages last_msg ON last_msg.conversation_id = c.id
+    LEFT JOIN users u_other ON u_other.id = (
+      CASE WHEN last_msg.sender_id = $1 THEN last_msg.recipient_id ELSE last_msg.sender_id END
+    )
+    WHERE c.college_id = $2
+      AND c.id IN (
+        SELECT DISTINCT c2.id FROM conversations c2
+        JOIN messages m2 ON m2.conversation_id = c2.id
+        WHERE m2.mentorship_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM mentorship_requests mr
+          WHERE mr.id = m2.mentorship_id AND mr.status = 'accepted'
+          AND (mr.mentor_id = $1 OR mr.mentee_id = $1)
+        )
+        UNION
+        SELECT DISTINCT c3.id FROM conversations c3
+        JOIN messages m3 ON m3.conversation_id = c3.id
+        WHERE m3.mentorship_id IS NULL
+        AND (m3.sender_id = $1 OR m3.recipient_id = $1)
+      )
+    ORDER BY c.id, last_msg.created_at DESC
+    LIMIT 50
+  `, [userId, collegeId])
+
+  return result.map((row) => ({
+    id: row.id,
+    title: row.title,
+    created_by: row.created_by,
+    college_id: row.college_id,
+    is_archived: row.is_archived,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    other_user_id: row.other_user_id,
+    other_user_name: row.other_user_name,
+    other_user_picture: row.other_user_picture,
+    other_user_role: row.other_user_role,
+    last_message: row.last_message,
+    last_message_at: row.last_message_at,
+    unread_count: Number(row.unread_count) || 0,
+  }))
+}
+
+export async function getCompletedMentorshipConversations(
+  userId: number,
+  collegeId: number,
+  daysWindow: number = 30
+): Promise<Conversation[]> {
+  const result = await query<any>(`
+    SELECT c.id, c.title, c.created_by, c.college_id, c.is_archived, c.created_at, c.updated_at,
+      mr.id as mentorship_id,
+      mr.status as mentorship_status,
+      mr.updated_at as completed_at,
+      (
+        SELECT m2.content FROM messages m2 
+        WHERE m2.conversation_id = c.id 
+        ORDER BY m2.created_at DESC 
+        LIMIT 1
+      ) as last_message,
+      (
+        SELECT m2.created_at FROM messages m2 
+        WHERE m2.conversation_id = c.id 
+        ORDER BY m2.created_at DESC 
+        LIMIT 1
+      ) as last_message_at,
+      CASE 
+        WHEN $1 = mr.mentor_id THEN u_mentee.id
+        ELSE u_mentor.id
+      END as other_user_id,
+      CASE 
+        WHEN $1 = mr.mentor_id THEN u_mentee.first_name || ' ' || u_mentee.last_name
+        ELSE u_mentor.first_name || ' ' || u_mentor.last_name
+      END as other_user_name,
+      CASE 
+        WHEN $1 = mr.mentor_id THEN u_mentee.profile_picture
+        ELSE u_mentor.profile_picture
+      END as other_user_picture,
+      CASE 
+        WHEN $1 = mr.mentor_id THEN u_mentee.role
+        ELSE u_mentor.role
+      END as other_user_role,
+      (SELECT COUNT(*) FROM messages um WHERE um.conversation_id = c.id AND um.recipient_id = $1 AND um.is_read = false) as unread_count
+    FROM conversations c
+    JOIN messages m ON m.conversation_id = c.id AND m.mentorship_id IS NOT NULL
+    JOIN mentorship_requests mr ON mr.id = m.mentorship_id AND mr.status = 'completed'
+    LEFT JOIN users u_mentor ON u_mentor.id = mr.mentor_id
+    LEFT JOIN users u_mentee ON u_mentee.id = mr.mentee_id
+    WHERE c.college_id = $2 
+      AND mr.updated_at >= NOW() - ($3 || ' days')::interval
+      AND (mr.mentor_id = $1 OR mr.mentee_id = $1)
+    ORDER BY c.updated_at DESC
+    LIMIT 20
+  `, [userId, collegeId, daysWindow])
+
+  return result.map((row) => ({
+    id: row.id,
+    title: row.title,
+    created_by: row.created_by,
+    college_id: row.college_id,
+    is_archived: row.is_archived,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    other_user_id: row.other_user_id,
+    other_user_name: row.other_user_name,
+    other_user_picture: row.other_user_picture,
+    other_user_role: row.other_user_role,
+    last_message: row.last_message,
+    last_message_at: row.last_message_at,
+    unread_count: Number(row.unread_count) || 0,
+    is_mentorship_completed: row.mentorship_status === 'completed',
+    completed_at: row.completed_at,
+    mentorship_id: row.mentorship_id,
+  }))
+}
+
+export async function getConversationById(conversationId: number): Promise<Conversation | null> {
+  const result = await query<Conversation>(
+    `SELECT * FROM conversations WHERE id = $1`,
+    [conversationId],
+  )
+  return result[0] || null
+}
+
+export async function updateConversationTitle(conversationId: number, title: string): Promise<void> {
+  await query(
+    `UPDATE conversations SET title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+    [title, conversationId],
+  )
+}
+
+export async function archiveConversation(conversationId: number): Promise<void> {
+  await query(
+    `UPDATE conversations SET is_archived = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+    [conversationId],
+  )
+}
+
+export async function getConversationMessages(
+  conversationId: number,
+  limit: number = 50,
+  offset: number = 0,
+): Promise<Message[]> {
+  const result = await query<any>(`
+    SELECT m.*,
+      u1.first_name as sender_first_name, u1.last_name as sender_last_name, u1.profile_picture as sender_profile_picture,
+      u2.first_name as recipient_first_name, u2.last_name as recipient_last_name, u2.profile_picture as recipient_profile_picture
+    FROM messages m
+    JOIN users u1 ON m.sender_id = u1.id
+    JOIN users u2 ON m.recipient_id = u2.id
+    WHERE m.conversation_id = $1
+    ORDER BY m.created_at ASC
+    LIMIT $2 OFFSET $3
+  `, [conversationId, limit, offset])
+
+  return result.map((row) => ({
+    id: row.id,
+    sender_id: row.sender_id,
+    recipient_id: row.recipient_id,
+    conversation_id: row.conversation_id,
+    mentorship_id: row.mentorship_id,
+    subject: row.subject,
+    content: row.content,
+    is_read: row.is_read,
+    created_at: row.created_at,
+    sender: {
+      first_name: row.sender_first_name,
+      last_name: row.sender_last_name,
+      profile_picture: row.sender_profile_picture,
+    },
+    recipient: {
+      first_name: row.recipient_first_name,
+      last_name: row.recipient_last_name,
+      profile_picture: row.recipient_profile_picture,
+    },
+  }))
+}
+
 // Fundraising
 export interface FundraisingCampaign {
   id: number
@@ -490,10 +853,16 @@ export interface FundraisingCampaign {
   description: string
   goal_amount: number
   current_amount: number
+  currency: string
+  campaign_type: string
+  banner_image: string | null
+  is_featured: boolean
+  donor_count: number
   start_date: Date
   end_date: Date
   status: string
   created_at: Date
+  updated_at: Date
 }
 
 export async function createFundraisingCampaign(data: {
@@ -516,10 +885,19 @@ export async function createFundraisingCampaign(data: {
   return result[0]
 }
 
-export async function getFundraisingCampaigns(college_id: number): Promise<FundraisingCampaign[]> {
+export async function getFundraisingCampaigns(college_id: number, role: string = 'student'): Promise<FundraisingCampaign[]> {
+  if (role === 'admin') {
+    const result = await query<FundraisingCampaign>(
+      `SELECT * FROM fundraising_campaigns
+       WHERE college_id = $1 AND status = 'active'
+       ORDER BY created_at DESC`,
+      [college_id],
+    )
+    return result
+  }
   const result = await query<FundraisingCampaign>(
     `SELECT * FROM fundraising_campaigns
-     WHERE college_id = $1 AND status = 'active'
+     WHERE college_id = $1 AND status IN ('active', 'completed')
      ORDER BY created_at DESC`,
     [college_id],
   )
@@ -571,6 +949,26 @@ export async function getUsersByCollege(college_id: number, role?: string, limit
 
   const result = await query<Partial<User>>(queryStr, params)
   return result
+}
+
+export async function searchStudents(college_id: number, searchQuery: string): Promise<Partial<User>[]> {
+  const searchTerm = `%${searchQuery}%`
+  return await query<Partial<User>>(
+    `SELECT id, first_name, last_name, email, role, profile_picture, 
+            graduation_year, degree, major, status
+     FROM users
+     WHERE college_id = $1 
+       AND role = 'student'
+       AND (
+         LOWER(first_name) LIKE LOWER($2) 
+         OR LOWER(last_name) LIKE LOWER($2)
+         OR LOWER(first_name || ' ' || last_name) LIKE LOWER($2)
+         OR LOWER(email) LIKE LOWER($2)
+       )
+     ORDER BY first_name, last_name
+     LIMIT 20`,
+    [college_id, searchTerm],
+  )
 }
 
 // User management functions for admin approval

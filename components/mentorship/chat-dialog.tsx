@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send } from "lucide-react"
 import useSWR from "swr"
+import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url, { credentials: "include" }).then((r) => r.json())
 
@@ -75,17 +76,15 @@ export function ChatDialog({
         body: JSON.stringify(payload),
       })
 
-      const responseData = await response.json()
-
       if (response.ok) {
         setMessage("")
         await mutate()
       } else {
-        alert(`Failed to send message: ${responseData.error || "Unknown error"}`)
+        const responseData = await response.json()
+        toast.error(responseData.error || "Failed to send message")
       }
-    } catch (error) {
-      console.error("Failed to send message:", error)
-      alert("Failed to send message. Please try again.")
+    } catch {
+      toast.error("Failed to send message. Please try again.")
     } finally {
       setSending(false)
     }

@@ -10,6 +10,9 @@ import { Pool } from "pg"
 
 const globalPool = global as any
 
+// Detect if using local connection (localhost/127.0.0.1)
+const isLocalConnection = process.env.DATABASE_URL?.includes("localhost") || process.env.DATABASE_URL?.includes("127.0.0.1")
+
 if (!globalPool.pgPool) {
   globalPool.pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -18,7 +21,8 @@ if (!globalPool.pgPool) {
     idleTimeoutMillis: 5000,
     connectionTimeoutMillis: 5000,
     allowExitOnIdle: true,
-    ssl: {
+    // Disable SSL for local connections, enable for remote (Supabase, etc.)
+    ssl: isLocalConnection ? false : {
       rejectUnauthorized: false,
     },
   })

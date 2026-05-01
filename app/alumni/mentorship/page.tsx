@@ -70,6 +70,16 @@ export default function AlumniMentorshipPage() {
     }
   }
 
+  const handleChat = (request: any) => {
+    const menteeName = `${request.mentee_first_name || ""} ${request.mentee_last_name || ""}`.trim()
+    setSelectedMentee({
+      id: request.mentee_id,
+      name: menteeName || "Student",
+      picture: request.mentee_profile_picture,
+    })
+    setChatOpen(true)
+  }
+
   const handleDelete = async (requestId: string) => {
     if (!confirm("Are you sure you want to delete this mentorship request?")) return
 
@@ -115,15 +125,6 @@ export default function AlumniMentorshipPage() {
       console.error("[v0] Failed to complete mentorship:", error)
       alert("Failed to complete mentorship. Please try again.")
     }
-  }
-
-  const handleChat = (request: any) => {
-    setSelectedMentee({
-      id: request.mentee_id,
-      name: `${request.mentee_first_name} ${request.mentee_last_name}`,
-      picture: request.mentee_profile_picture,
-    })
-    setChatOpen(true)
   }
 
   const getStatusIcon = (status: string) => {
@@ -237,7 +238,11 @@ export default function AlumniMentorshipPage() {
         )}
 
         {(request.status === "completed" || request.status === "rejected") && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => handleChat(request)} variant="outline" className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Message Student
+            </Button>
             <Button variant="outline" onClick={() => handleDelete(request.id)} className="flex items-center gap-2">
               <Trash2 className="h-4 w-4" />
               Delete

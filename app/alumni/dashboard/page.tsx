@@ -6,8 +6,9 @@ import { QuickActions } from "@/components/dashboard/quick-actions"
 import { useAuth } from "@/components/layout/auth-checker"
 import useSWR from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, BookOpen, Heart, MessageSquare, DollarSign, Trophy, Plus, UserPlus, CheckCircle, XCircle, Clock } from "lucide-react"
+import { Calendar, BookOpen, Heart, MessageSquare, DollarSign, Trophy, Plus, CheckCircle, XCircle, Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Suspense } from "react"
 
 const fetcher = (url: string) => {
   const token = localStorage.getItem("session_token") || ""
@@ -17,7 +18,7 @@ const fetcher = (url: string) => {
   }).then((r) => r.json())
 }
 
-export default function AlumniDashboard() {
+function AlumniDashboardContent() {
   const { user, isLoading: authLoading } = useAuth("alumni")
 
   const { data: activityData, error: activityError, isLoading: activityLoading } = useSWR("/api/activity/alumni", fetcher, {
@@ -37,7 +38,7 @@ export default function AlumniDashboard() {
   const userName = `${user.first_name} ${user.last_name}`
   const activities = activityData?.activities || []
   const errorMsg = activityData?.error
-  
+
   console.log("[v0] Alumni Dashboard - activityData:", activityData)
 
   const quickActions = [
@@ -108,73 +109,85 @@ export default function AlumniDashboard() {
     <div className="flex h-screen bg-background">
       <Sidebar userRole={user.role} userName={userName} userBadges={user.badges || []} userPoints={user.points || 0} />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-6 lg:p-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-foreground">Welcome back, {userName}!</h1>
-            <p className="text-muted-foreground">
-              {user.current_position && user.current_company
-                ? `${user.current_position} at ${user.current_company}`
-                : "Alumni Member"}
-            </p>
-          </div>
-
-          <DashboardStats userRole="alumni" />
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-            <div className="space-y-6">
-              <QuickActions actions={quickActions} />
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6 lg:p-8">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-foreground">Welcome back, {userName}!</h1>
+              <p className="text-muted-foreground">
+                {user.current_position && user.current_company
+                  ? `${user.current_position} at ${user.current_company}`
+                  : "Alumni Member"}
+              </p>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-yellow-500" />
-                  My Activity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {activityLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-primary border-r-transparent"></div>
-                  </div>
-                ) : errorMsg ? (
-                  <div className="text-center py-8">
-                    <p className="text-destructive">Error: {errorMsg}</p>
-                    <p className="text-sm text-muted-foreground mt-1">Please check console for details</p>
-                  </div>
-                ) : activities.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">No activity yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">Start by mentoring students or hosting events!</p>
-                    <p className="text-xs text-muted-foreground mt-2">User ID: {user.id}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {activities.map((activity: any, index: number) => (
-                      <div key={activity.id || index} className="flex items-start gap-3 pb-3 border-b last:border-0">
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                          {getActivityIcon(activity.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{activity.title}</p>
-                          <p className="text-xs text-muted-foreground">{activity.description}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {getStatusBadge(activity.status)}
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(activity.timestamp).toLocaleDateString()}
-                            </span>
+            <DashboardStats userRole="alumni" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+              <div className="space-y-6">
+                <QuickActions actions={quickActions} />
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-yellow-500" />
+                    My Activity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {activityLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-primary border-r-transparent"></div>
+                    </div>
+                  ) : errorMsg ? (
+                    <div className="text-center py-8">
+                      <p className="text-destructive">Error: {errorMsg}</p>
+                      <p className="text-sm text-muted-foreground mt-1">Please check console for details</p>
+                    </div>
+                  ) : activities.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No activity yet</p>
+                      <p className="text-sm text-muted-foreground mt-1">Start by mentoring students or hosting events!</p>
+                      <p className="text-xs text-muted-foreground mt-2">User ID: {user.id}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {activities.map((activity: any, index: number) => (
+                        <div key={activity.id || index} className="flex items-start gap-3 pb-3 border-b last:border-0">
+                          <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                            {getActivityIcon(activity.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{activity.title}</p>
+                            <p className="text-xs text-muted-foreground">{activity.description}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {getStatusBadge(activity.status)}
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(activity.timestamp).toLocaleDateString()}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
     </div>
+  )
+}
+
+export default function AlumniDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+      </div>
+    }>
+      <AlumniDashboardContent />
+    </Suspense>
   )
 }

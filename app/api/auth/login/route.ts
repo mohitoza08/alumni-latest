@@ -3,6 +3,7 @@ import { query } from "@/lib/db"
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
+import { validateEmail, validatePassword } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
 
@@ -11,11 +12,27 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { email, password, college, role } = body
 
-    console.log("[v0] Login attempt:", { email, college })
+    const validationErrors: string[] = []
 
-    if (!email || !password || !college) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const emailResult = validateEmail(email)
+    if (!emailResult.valid) {
+      validationErrors.push(emailResult.error!)
     }
+
+    const passwordResult = validatePassword(password)
+    if (!passwordResult.valid) {
+      validationErrors.push(passwordResult.error!)
+    }
+
+    if (!college) {
+      validationErrors.push("College is required")
+    }
+
+    if (validationErrors.length > 0) {
+      return NextResponse.json({ error: "Validation failed", details: validationErrors }, { status: 400 })
+    }
+
+    console.log("[v0] Login attempt:", { email, college })
 
     let collegeId: number | null = null
 
@@ -46,18 +63,21 @@ export async function POST(req: NextRequest) {
     console.log("[v0] User check:", userCheck)
 
     if (userCheck.length === 0) {
-      return NextResponse.json({ error: "User not found with this email and college" }, { status: 401 })
+      console.log("[v0] User not found - need to register first")
+      return NextResponse.json({ error: "User not found with this email and college. Please register first." }, { status: 401 })
     }
 
     const userData = userCheck[0]
-    if (userData.status !== 'active') {
-      return NextResponse.json({ error: `Account is ${userData.status}, not active` }, { status: 401 })
-    }
+    console.log("[v0] User status:", userData.status)
 
     const user = await authenticateUser(email, password, collegeId)
 
     if (!user) {
       return NextResponse.json({ error: "Invalid password" }, { status: 401 })
+    }
+
+    if (userData.status !== 'active' && userData.status !== 'pending' && userData.status !== 'rejected') {
+      return NextResponse.json({ error: `Account is ${userData.status}. Please contact support.` }, { status: 403 })
     }
 
     // Create session
@@ -77,7 +97,7 @@ export async function POST(req: NextRequest) {
     console.log("[v0] Login successful for user:", user.id)
 
     return NextResponse.json({
-      user,
+      user: { ...user, account_status: userData.status },
       token: session.token,
       message: "Login successful",
     })

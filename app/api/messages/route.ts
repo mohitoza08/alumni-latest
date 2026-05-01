@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "@/lib/session-helper"
-import { createMessage, getMessages } from "@/lib/db-helpers"
+import { query } from "@/lib/db"
+import { createMessage, getMessages, createConversation, findOrCreateDirectConversation } from "@/lib/db-helpers"
 
 export const dynamic = "force-dynamic"
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getServerSession()
@@ -11,23 +13,57 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { recipient_id, mentorship_id, subject, content } = body
+    let { recipient_id, mentorship_id, conversation_id, subject, content, title } = body
 
-    if (!recipient_id || !content) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!content) {
+      return NextResponse.json({ error: "Content is required" }, { status: 400 })
+    }
+
+    let finalConversationId = conversation_id ? Number(conversation_id) : undefined
+    let finalRecipientId = recipient_id ? Number(recipient_id) : undefined
+
+    if (finalConversationId && !finalRecipientId) {
+      const convResult = await query(
+        `SELECT sender_id, recipient_id FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT 1`,
+        [finalConversationId]
+      )
+      if (convResult.length > 0) {
+        const firstMsg = convResult[0]
+        const currentUserId = Number(user.id)
+        if (firstMsg.sender_id === currentUserId) {
+          finalRecipientId = Number(firstMsg.recipient_id)
+        } else {
+          finalRecipientId = Number(firstMsg.sender_id)
+        }
+      }
+    }
+
+    if (!finalRecipientId) {
+      return NextResponse.json({ error: "Recipient is required" }, { status: 400 })
+    }
+
+    if (!finalConversationId) {
+      const conv = await findOrCreateDirectConversation(
+        Number(user.id),
+        finalRecipientId,
+        Number(user.college_id),
+        title || `Chat with ${subject || "User"}`,
+      )
+      finalConversationId = conv.id
     }
 
     const messageData = {
       sender_id: Number(user.id),
-      recipient_id: Number(recipient_id),
+      recipient_id: finalRecipientId,
       mentorship_id: mentorship_id ? Number(mentorship_id) : undefined,
+      conversation_id: finalConversationId,
       subject,
       content,
     }
 
     const message = await createMessage(messageData)
 
-    return NextResponse.json({ message })
+    return NextResponse.json({ message, conversation_id: finalConversationId })
   } catch (error) {
     console.error("[v0] Create message error:", error)
     return NextResponse.json({ error: "Failed to send message" }, { status: 500 })

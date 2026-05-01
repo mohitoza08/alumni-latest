@@ -79,6 +79,7 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
   const [isVirtual, setIsVirtual] = useState(false)
   const [virtualLink, setVirtualLink] = useState("")
   const [eventType, setEventType] = useState("networking")
+  const [formErrors, setFormErrors] = useState<string[]>([])
 
   const filteredEvents = events
     .filter((event: Event) => {
@@ -233,6 +234,41 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
   }
 
   const handleCreateEvent = async () => {
+    setFormErrors([])
+    
+    const errors: string[] = []
+    if (!title || title.length < 3) errors.push("Title must be at least 3 characters")
+    if (!description || description.length < 10) errors.push("Description must be at least 10 characters")
+    
+    if (!startDate) {
+      errors.push("Event date is required")
+    } else if (new Date(startDate) <= new Date()) {
+      errors.push("Event date must be in the future")
+    }
+    
+    if (endDate && startDate && new Date(endDate) <= new Date(startDate)) {
+      errors.push("End date must be after start date")
+    }
+    
+    if (!location) errors.push("Location is required")
+    
+    if (registrationDeadline && new Date(registrationDeadline) <= new Date()) {
+      errors.push("Registration deadline must be in the future")
+    }
+    
+    if (isVirtual && virtualLink) {
+      try {
+        new URL(virtualLink)
+      } catch {
+        errors.push("Invalid meeting link URL")
+      }
+    }
+    
+    if (errors.length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
     try {
       const response = await fetch("/api/events", {
         method: "POST",
@@ -252,18 +288,60 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
         }),
       })
 
+      const data = await response.json()
+      
       if (response.ok) {
         await mutate()
         setIsCreateDialogOpen(false)
         resetForm()
+      } else if (data.details) {
+        setFormErrors(data.details)
+      } else {
+        setFormErrors([data.error || "Failed to create event"])
       }
     } catch (error) {
       console.error("[v0] Create error:", error)
+      setFormErrors(["Failed to create event. Please try again."])
     }
   }
 
   const handleEditEvent = async () => {
     if (!selectedEvent) return
+    
+    setFormErrors([])
+    
+    const errors: string[] = []
+    if (!title || title.length < 3) errors.push("Title must be at least 3 characters")
+    if (!description || description.length < 10) errors.push("Description must be at least 10 characters")
+    
+    if (!startDate) {
+      errors.push("Event date is required")
+    } else if (new Date(startDate) <= new Date() && selectedEvent.status === "upcoming") {
+      errors.push("Event date must be in the future")
+    }
+    
+    if (endDate && startDate && new Date(endDate) <= new Date(startDate)) {
+      errors.push("End date must be after start date")
+    }
+    
+    if (!location) errors.push("Location is required")
+    
+    if (registrationDeadline && new Date(registrationDeadline) <= new Date()) {
+      errors.push("Registration deadline must be in the future")
+    }
+    
+    if (isVirtual && virtualLink) {
+      try {
+        new URL(virtualLink)
+      } catch {
+        errors.push("Invalid meeting link URL")
+      }
+    }
+    
+    if (errors.length > 0) {
+      setFormErrors(errors)
+      return
+    }
 
     try {
       const response = await fetch(`/api/events/${selectedEvent.id}`, {
@@ -284,14 +362,21 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
         }),
       })
 
+      const data = await response.json()
+      
       if (response.ok) {
         await mutate()
         setIsEditDialogOpen(false)
         setSelectedEvent(null)
         resetForm()
+      } else if (data.details) {
+        setFormErrors(data.details)
+      } else {
+        setFormErrors([data.error || "Failed to update event"])
       }
     } catch (error) {
       console.error("[v0] Edit error:", error)
+      setFormErrors(["Failed to update event. Please try again."])
     }
   }
 
@@ -306,6 +391,7 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
     setIsVirtual(false)
     setVirtualLink("")
     setEventType("networking")
+    setFormErrors([])
   }
 
   return (
@@ -328,6 +414,15 @@ export function EventsClient({ initialEvents, userId, userRole }: EventsClientPr
                 <DialogTitle>Create New Event</DialogTitle>
                 <DialogDescription>Fill in the details to create a new event for the community.</DialogDescription>
               </DialogHeader>
+              {formErrors.length > 0 && (
+                <div className="mx-6 mt-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-3">
+                  <ul className="list-disc list-inside text-sm text-red-600 dark:text-red-400">
+                    {formErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="title">Event Title</Label>

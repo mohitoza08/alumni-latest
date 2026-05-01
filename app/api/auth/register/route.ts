@@ -1,105 +1,65 @@
-import { createUser, createSession } from "@/lib/auth-db"
+import { query } from "@/lib/db"
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { sendOTPEmail } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
+
+const COLLEGE_DOMAINS = [".edu", ".ac.in", ".ac.uk", ".edu.in"]
+
+function isValidCollegeEmail(email: string): boolean {
+  const lower = email.toLowerCase()
+  return COLLEGE_DOMAINS.some((d) => lower.endsWith(d))
+}
+
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const { role, email } = body
 
-    const { email, password, first_name, last_name, college, role, phone, graduation_year, degree, major } = body
-
-    if (!email || !password || !first_name || !last_name || !college || !role) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!email) {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
 
-    const collegeId = Number.parseInt(college)
-    if (isNaN(collegeId)) {
-      return NextResponse.json({ error: "Invalid college" }, { status: 400 })
+    if (role === "student" && !isValidCollegeEmail(email)) {
+      return NextResponse.json({ error: "Please use your college email" }, { status: 400 })
     }
 
-    // Create user
-    const user = await createUser({
-      college_id: collegeId,
-      email,
-      password,
-      first_name,
-      last_name,
-      role: role || "student",
-      phone,
-      graduation_year: graduation_year ? Number.parseInt(graduation_year) : undefined,
-      degree,
-      major,
-    })
-
-    console.log("[v0] User created:", { id: user.id, email: user.email, status: user.status })
-
-    if (user.status === "pending") {
-      const { query } = await import("@/lib/db")
-
-      await query(
-        `INSERT INTO applications (
-          college_id, student_id, full_name, email, graduation_year, degree, major, 
-          status, additional_documents, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
-        [
-          collegeId,
-          user.id,
-          `${first_name} ${last_name}`,
-          email,
-          graduation_year ? Number.parseInt(graduation_year) : null,
-          degree || null,
-          major || null,
-          "pending",
-          JSON.stringify({}),
-        ],
-      )
-
-      console.log("[v0] Application record created for user:", user.id)
-
-      return NextResponse.json({
-        message: "Registration submitted successfully. Please wait for admin approval.",
-        needsApproval: true,
-        user: {
-          email: user.email,
-          name: `${user.first_name} ${user.last_name}`,
-        },
-      })
+    const emailCheck = await query("SELECT id FROM users WHERE email = $1", [email])
+    if (emailCheck.length > 0) {
+      return NextResponse.json({ error: "Email already registered" }, { status: 409 })
     }
 
-    // Create session for admins (they're auto-approved)
-    const session = await createSession(user.id)
-    console.log("[v0] Session created for admin user:", session.token)
+    await query("DELETE FROM email_otps WHERE email = $1", [email])
 
-    // Set cookie
-    const cookieStore = await cookies()
-    cookieStore.set("session", session.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: "/",
-    })
+    const otp = generateOTP()
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
+
+    await query(
+      "INSERT INTO email_otps (email, otp, expires_at) VALUES ($1, $2, $3)",
+      [email, otp, expiresAt]
+    )
+
+    console.log(`[REGISTER] Sending OTP to: ${email}, Code: ${otp}`)
+
+    const emailSent = await sendOTPEmail(email, otp)
+    console.log(`[REGISTER] Email sent result: ${emailSent ? "SUCCESS" : "FAILED"}`)
+
+    if (!emailSent) {
+      console.log(`[DEV MODE] OTP for ${email}: ${otp}`)
+    }
 
     return NextResponse.json({
-      user,
-      message: "Registration successful",
+      message: "OTP sent to your email",
+      email,
+      expires_in: 600,
     })
   } catch (error: any) {
-    console.error("[v0] Registration error:", error)
-
-    if (error.code === "23505") {
-      return NextResponse.json({ error: "Email already exists" }, { status: 409 })
-    }
-
-    return NextResponse.json(
-      {
-        error: "Registration failed",
-        details: error.message,
-      },
-      { status: 500 },
-    )
+    console.error("[v0] Register error:", error.message)
+    return NextResponse.json({ error: "Failed to send OTP: " + error.message }, { status: 500 })
   }
 }

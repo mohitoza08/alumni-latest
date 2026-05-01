@@ -1,13 +1,17 @@
 "use client"
+import { useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { CheckCircle, XCircle, Clock, User, Building, MapPin, GraduationCap, Briefcase } from "lucide-react"
 import { useAuth } from "@/components/layout/auth-checker"
 import useSWR from "swr"
+import { toast } from "sonner"
 
 const fetcher = async (url: string) => {
   const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : ""
@@ -22,9 +26,12 @@ const fetcher = async (url: string) => {
 
 export default function ApplicationsPage() {
   const { user, isLoading: authLoading } = useAuth("admin")
+  const [rejectingApp, setRejectingApp] = useState<any>(null)
+  const [rejectNotes, setRejectNotes] = useState("")
+  const [processing, setProcessing] = useState(false)
 
   const { data: applicationsData, mutate } = useSWR("/api/applications", fetcher, {
-    refreshInterval: 10000, // Refresh every 10 seconds
+    refreshInterval: 10000,
     revalidateOnFocus: true,
   })
 
@@ -50,38 +57,40 @@ export default function ApplicationsPage() {
       })
 
       if (response.ok) {
-        await mutate() // Refresh the list
-        console.log("[v0] Application approved successfully")
+        toast.success("Application approved successfully")
+        await mutate()
       } else {
         const error = await response.json()
-        console.error("[v0] Failed to approve application:", error)
-        alert("Failed to approve application. Please try again.")
+        toast.error(error.error || "Failed to approve application")
       }
-    } catch (error) {
-      console.error("[v0] Approve application error:", error)
-      alert("Failed to approve application. Please check your connection.")
+    } catch {
+      toast.error("Network error. Please check your connection.")
     }
   }
 
   const handleReject = async (applicationId: string) => {
+    setProcessing(true)
     try {
       const token = localStorage.getItem("session_token") || ""
       const response = await fetch(`/api/applications/${applicationId}/reject`, {
         method: "POST",
-        headers: { "x-session-token": token },
+        headers: { "Content-Type": "application/json", "x-session-token": token },
+        body: JSON.stringify({ admin_notes: rejectNotes }),
       })
 
       if (response.ok) {
-        await mutate() // Refresh the list
-        console.log("[v0] Application rejected successfully")
+        toast.success("Application rejected successfully")
+        setRejectingApp(null)
+        setRejectNotes("")
+        await mutate()
       } else {
         const error = await response.json()
-        console.error("[v0] Failed to reject application:", error)
-        alert("Failed to reject application. Please try again.")
+        toast.error(error.error || "Failed to reject application")
       }
-    } catch (error) {
-      console.error("[v0] Reject application error:", error)
-      alert("Failed to reject application. Please check your connection.")
+    } catch {
+      toast.error("Network error. Please check your connection.")
+    } finally {
+      setProcessing(false)
     }
   }
 
@@ -195,7 +204,7 @@ export default function ApplicationsPage() {
               </Button>
               <Button
                 variant="destructive"
-                onClick={() => handleReject(application.id)}
+                onClick={() => { setRejectingApp(application); setRejectNotes("") }}
                 className="flex items-center gap-2"
               >
                 <XCircle className="h-4 w-4" />
@@ -214,13 +223,11 @@ export default function ApplicationsPage() {
 
       <main className="flex-1 overflow-y-auto">
         <div className="p-6 lg:p-8">
-          {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground">Alumni Applications</h1>
             <p className="text-muted-foreground">Review and manage student alumni application requests</p>
           </div>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardContent className="pt-6">
@@ -268,7 +275,6 @@ export default function ApplicationsPage() {
             </Card>
           </div>
 
-          {/* Applications Tabs */}
           <Tabs defaultValue="pending" className="space-y-4">
             <TabsList>
               <TabsTrigger value="pending">Pending ({pendingApplications.length})</TabsTrigger>
@@ -320,6 +326,40 @@ export default function ApplicationsPage() {
           </Tabs>
         </div>
       </main>
+
+      <Dialog open={!!rejectingApp} onOpenChange={(open) => { if (!open) { setRejectingApp(null); setRejectNotes("") } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Application</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to reject {rejectingApp?.name || "this"}'s application? An email will be sent to the applicant.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <div className="text-sm">
+              <p><span className="text-muted-foreground">Email:</span> {rejectingApp?.email}</p>
+              <p><span className="text-muted-foreground">Degree:</span> {rejectingApp?.degree}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Admin Notes (optional)</label>
+              <Textarea
+                value={rejectNotes}
+                onChange={(e) => setRejectNotes(e.target.value)}
+                placeholder="Reason for rejection..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setRejectingApp(null); setRejectNotes("") }} disabled={processing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => handleReject(rejectingApp.id)} disabled={processing}>
+              {processing ? "Processing..." : "Reject Application"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

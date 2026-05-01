@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { Heart, MessageCircle, Pin, Flag, Send } from "lucide-react"
 import { toast } from "sonner"
+import { AuthorPopup } from "@/components/forum/author-popup"
 
 interface PostCardProps {
   post: any
@@ -125,26 +126,22 @@ export function PostCard({ post, onUpdate }: PostCardProps) {
     <Card className="mb-6">
       <CardHeader>
         <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-3">
-            <Avatar>
-              <AvatarImage src={post.authorAvatar || post.author_avatar || "/placeholder.svg"} />
-              <AvatarFallback>{(post.authorName || post.author_name || "U").charAt(0)}</AvatarFallback>
-            </Avatar>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-medium">{post.authorName || post.author_name || "Unknown"}</span>
-                <Badge variant="secondary" className={getRoleColor(post.authorRole || post.author_role || "student")}>
-                  {post.authorRole || post.author_role || "student"}
-                </Badge>
-                {post.isPinned && <Pin className="h-4 w-4 text-primary" />}
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <span>{createdDate ? new Date(createdDate).toLocaleDateString() : "Recently"}</span>
-                <span>•</span>
-                <Badge variant="outline" className="text-xs">
-                  {post.category || "general"}
-                </Badge>
-              </div>
+          <div className="flex flex-col space-y-2">
+            <div className="flex items-center space-x-3">
+              <AuthorPopup
+                authorId={post.author_id || post.user_id || 0}
+                authorName={post.authorName || post.author_name || "Unknown"}
+                authorRole={post.authorRole || post.author_role || "student"}
+                authorAvatar={post.authorAvatar || post.author_avatar}
+              />
+              {post.isPinned && <Pin className="h-4 w-4 text-primary" />}
+            </div>
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <span>{createdDate ? new Date(createdDate).toLocaleDateString() : "Recently"}</span>
+              <span>•</span>
+              <Badge variant="outline" className="text-xs">
+                {post.category || "general"}
+              </Badge>
             </div>
           </div>
           <Button variant="ghost" size="sm">

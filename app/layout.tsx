@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SWRProvider } from "@/lib/swr-config"
+import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -29,6 +30,7 @@ export default function RootLayout({
           </SWRProvider>
         </ThemeProvider>
         <Analytics />
+        <Toaster />
       </body>
     </html>
   )

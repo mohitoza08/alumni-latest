@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AuthChecker } from "@/components/layout/auth-checker"
 import useSWR from "swr"
 import { Flag, Eye, Trash2, Pin, MessageSquare, Heart, Calendar } from "lucide-react"
+import { AuthorPopup } from "@/components/forum/author-popup"
 
 const fetcher = (url: string) => {
   const token = typeof window !== "undefined" ? localStorage.getItem("session_token") : ""
@@ -75,17 +76,15 @@ export default function AdminCommunityPage() {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
-            <Avatar>
-              <AvatarImage src={post.author_avatar || post.authorAvatar || "/placeholder.svg"} />
-              <AvatarFallback>{(post.author_name || post.authorName || "U").charAt(0)}</AvatarFallback>
-            </Avatar>
+            <AuthorPopup
+              authorId={post.author_id || post.user_id || 0}
+              authorName={post.author_name || post.authorName || "Unknown"}
+              authorRole={post.author_role || post.authorRole || "student"}
+              authorAvatar={post.author_avatar || post.authorAvatar}
+            />
             <div>
               <CardTitle className="text-lg">{post.title}</CardTitle>
               <CardDescription className="flex items-center gap-2">
-                <span>{post.author_name || post.authorName}</span>
-                <Badge variant="secondary" className={getRoleColor(post.author_role || post.authorRole || "student")}>
-                  {post.author_role || post.authorRole || "student"}
-                </Badge>
                 {(post.isPinned || post.is_pinned) && <Pin className="h-4 w-4 text-primary" />}
                 {(post.isReported || post.is_reported) && <Flag className="h-4 w-4 text-red-500" />}
               </CardDescription>

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "@/lib/session-helper"
 import { createEvent, getEvents } from "@/lib/db-helpers"
 import { query } from "@/lib/db"
+import { validateTitle, validateContent, validateEventDate, validateFutureDate, validateUrl, validateCampaignDeadline } from "@/lib/validation"
 export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
@@ -144,8 +145,55 @@ export async function POST(req: NextRequest) {
       event_type,
     } = body
 
-    if (!title || !description || !start_date || !location) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const validationErrors: string[] = []
+
+    const titleResult = validateTitle(title)
+    if (!titleResult.valid) {
+      validationErrors.push(titleResult.error!)
+    }
+
+    const descriptionResult = validateContent(description, 10)
+    if (!descriptionResult.valid) {
+      validationErrors.push(descriptionResult.error!)
+    }
+
+    if (!start_date) {
+      validationErrors.push("Event date is required")
+    } else {
+      const startDateResult = validateEventDate(start_date)
+      if (!startDateResult.valid) {
+        validationErrors.push(startDateResult.error!)
+      }
+    }
+
+    if (end_date) {
+      const startDate = new Date(start_date)
+      const endDate = new Date(end_date)
+      if (endDate <= startDate) {
+        validationErrors.push("End date must be after start date")
+      }
+    }
+
+    if (!location) {
+      validationErrors.push("Location is required")
+    }
+
+    if (registration_deadline) {
+      const deadlineResult = validateCampaignDeadline(registration_deadline)
+      if (!deadlineResult.valid) {
+        validationErrors.push(deadlineResult.error!)
+      }
+    }
+
+    if (is_virtual && virtual_link) {
+      const urlResult = validateUrl(virtual_link)
+      if (!urlResult.valid) {
+        validationErrors.push(urlResult.error!)
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      return NextResponse.json({ error: "Validation failed", details: validationErrors }, { status: 400 })
     }
 
     console.log("[v0] Creating event:", { title, start_date, location, event_type })

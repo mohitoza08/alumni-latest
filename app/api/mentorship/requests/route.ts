@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "@/lib/session-helper"
 import { createMentorshipRequest, getMentorshipRequests } from "@/lib/db-helpers"
 import { getUserBySession } from "@/lib/auth-db"
+import { validateTitle, validateContent } from "@/lib/validation"
 
 export const dynamic = "force-dynamic"
 export async function GET(req: NextRequest) {
@@ -22,8 +23,9 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const asMentor = searchParams.get("as_mentor") === "true"
+    const status = searchParams.get("status") || undefined
 
-    const rawRequests = await getMentorshipRequests(user.id, asMentor)
+    const rawRequests = await getMentorshipRequests(user.id, asMentor, status)
 
     const requests = rawRequests.map((r: any) => ({
       id: r.id,
@@ -71,9 +73,29 @@ export async function POST(req: NextRequest) {
 
     const finalMentorId = mentorId || mentor_id
 
-    if (!finalMentorId || !topic || !message) {
+    const validationErrors: string[] = []
+
+    if (!finalMentorId) {
+      validationErrors.push("Mentor is required")
+    }
+
+    const topicResult = validateTitle(topic)
+    if (!topicResult.valid) {
+      validationErrors.push(topicResult.error!)
+    }
+
+    if (!topic || !message) {
       console.log("[v0] Missing fields:", { mentorId: finalMentorId, topic, message })
       return NextResponse.json({ error: "Missing required fields: mentorId, topic, and message" }, { status: 400 })
+    }
+
+    const messageResult = validateContent(message, 20)
+    if (!messageResult.valid) {
+      validationErrors.push(messageResult.error!)
+    }
+
+    if (validationErrors.length > 0) {
+      return NextResponse.json({ error: "Validation failed", details: validationErrors }, { status: 400 })
     }
 
     if (!user.college_id) {

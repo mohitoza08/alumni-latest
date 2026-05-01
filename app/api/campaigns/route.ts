@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const campaigns = await getFundraisingCampaigns(user.college_id)
+    const campaigns = await getFundraisingCampaigns(user.college_id, user.role)
 
     const transformedCampaigns = campaigns.map((campaign: any) => ({
       id: campaign.id,

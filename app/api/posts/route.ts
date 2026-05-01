@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
           user_id: p.user_id,
           college_id: p.college_id,
           isLiked,
+          author_id: p.user_id,
           comments: formattedComments,
         }
       }),

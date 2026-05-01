@@ -113,6 +113,7 @@ function seedDatabase() {
     status: "active",
     email_verified: true,
     graduation_year: 2025,
+    current_year_level: "3",
     degree: "B.A. Business",
     major: "Business Administration",
     created_at: new Date(),

@@ -14,6 +14,7 @@ export interface User {
   profile_picture?: string
   bio?: string
   graduation_year?: number
+  current_year_level?: string
   degree?: string
   major?: string
   current_company?: string
@@ -44,6 +45,7 @@ export async function createUser(data: {
   role: UserRole
   phone?: string
   graduation_year?: number
+  current_year_level?: string
   degree?: string
   major?: string
 }): Promise<User> {
@@ -54,8 +56,8 @@ export async function createUser(data: {
   const result = await query<User>(
     `INSERT INTO users (
       college_id, email, password_hash, first_name, last_name, role, phone,
-      graduation_year, degree, major, status, email_verified
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      graduation_year, current_year_level, degree, major, status, email_verified
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     RETURNING *`,
     [
       data.college_id,
@@ -66,6 +68,7 @@ export async function createUser(data: {
       data.role,
       data.phone || null,
       data.graduation_year || null,
+      data.current_year_level || null,
       data.degree || null,
       data.major || null,
       initialStatus,
@@ -124,7 +127,7 @@ export async function getUserBySession(token: string): Promise<User | null> {
   const result = await query<User>(
     `SELECT u.* FROM users u
      INNER JOIN user_sessions s ON s.user_id = u.id
-     WHERE s.token = $1 AND s.expires_at > CURRENT_TIMESTAMP AND u.status = 'active'`,
+     WHERE s.token = $1 AND s.expires_at > CURRENT_TIMESTAMP`,
     [token],
   )
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import { ChatDialog } from "@/components/mentorship/chat-dialog"
 const fetcher = (url: string) => fetch(url, { credentials: "include" }).then((r) => r.json())
 
 export default function StudentMentorshipPage() {
+  const router = useRouter()
   const { user, isLoading } = useAuth("student")
   const {
     data: alumniData,
@@ -42,6 +44,13 @@ export default function StudentMentorshipPage() {
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
     },
+  )
+
+  // Fetch completed mentorships for Past Chats
+  const { data: completedData } = useSWR(
+    user ? `/api/mentorship/requests?as_mentor=false&status=completed` : null,
+    fetcher,
+    { refreshInterval: 5000 }
   )
 
   const [requesting, setRequesting] = useState<number | null>(null)
@@ -178,6 +187,43 @@ export default function StudentMentorshipPage() {
                         <Button onClick={() => handleOpenChat(request)} className="w-full" variant="default">
                           <MessageSquare className="h-4 w-4 mr-2" />
                           Chat with Mentor
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Past Chats Section */}
+          {completedData?.requests?.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold mb-4">Past Chats</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {completedData.requests.slice(0, 6).map((request: any) => {
+                  const mentorName = `${request.mentor_first_name || ""} ${request.mentor_last_name || ""}`.trim()
+                  const mentorInitials = `${request.mentor_first_name?.[0] || ""}${request.mentor_last_name?.[0] || ""}`
+
+                  return (
+                    <Card key={request.id}>
+                      <CardHeader>
+                        <div className="flex items-start gap-4">
+                          <Avatar className="h-12 w-12">
+                            <AvatarImage src={request.mentor_profile_picture || "/placeholder.svg"} />
+                            <AvatarFallback>{mentorInitials || "M"}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <CardTitle className="text-lg">{mentorName || "Mentor"}</CardTitle>
+                            <CardDescription>{request.topic}</CardDescription>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <Badge className="mb-3 bg-gray-100 text-gray-800">Completed</Badge>
+                        <Button onClick={() => router.push("/student/messages")} className="w-full" variant="outline">
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          View in Messages
                         </Button>
                       </CardContent>
                     </Card>

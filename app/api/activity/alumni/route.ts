@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
     try {
       const posts = await query(
         `SELECT id, title, created_at FROM community_posts 
-         WHERE user_id = $1 
+         WHERE author_id = $1 
          ORDER BY created_at DESC 
          LIMIT 3`,
         [userId],

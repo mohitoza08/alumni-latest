@@ -15,7 +15,7 @@ interface AuthCheckerProps {
 
 export function AuthChecker({ requiredRole, children }: AuthCheckerProps) {
   const router = useRouter()
-  const { data, error, isLoading } = useSWR("/api/session", fetcher, {
+  const { data, isLoading } = useSWR("/api/session", fetcher, {
     refreshInterval: 0,
     revalidateOnFocus: false,
   })
@@ -58,6 +58,7 @@ export function AuthChecker({ requiredRole, children }: AuthCheckerProps) {
 
 export function useAuth(requiredRole?: "admin" | "alumni" | "student") {
   const router = useRouter()
+
   const { data, error, isLoading } = useSWR("/api/session", fetcher, {
     refreshInterval: 0,
     revalidateOnFocus: false,
@@ -65,12 +66,14 @@ export function useAuth(requiredRole?: "admin" | "alumni" | "student") {
 
   useEffect(() => {
     if (isLoading) return
-
     if (!data?.user) {
       router.push("/")
       return
     }
-
+    if (data.user.role === "alumni" && data.user.status === "pending") {
+      router.push("/pending")
+      return
+    }
     if (requiredRole && data.user.role !== requiredRole) {
       router.push("/")
       return
@@ -83,3 +86,4 @@ export function useAuth(requiredRole?: "admin" | "alumni" | "student") {
     error,
   }
 }
+

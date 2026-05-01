@@ -55,16 +55,20 @@ CREATE TABLE users (
     profile_picture VARCHAR(500),
     bio TEXT,
     graduation_year INTEGER,
+    current_year_level VARCHAR(10),
     degree VARCHAR(100),
     major VARCHAR(100),
     current_company VARCHAR(255),
     current_position VARCHAR(255),
     linkedin_url VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'pending', 'suspended')),
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'pending', 'suspended', 'rejected')),
     email_verified BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ban_reason TEXT,
+    suspended_until TIMESTAMP,
+    onboarding_completed BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (college_id) REFERENCES colleges(id) ON DELETE CASCADE,
     UNIQUE (college_id, email)
 );
@@ -491,6 +495,43 @@ CREATE INDEX idx_analytics_college ON analytics_metrics(college_id);
 CREATE INDEX idx_analytics_date ON analytics_metrics(metric_date DESC);
 
 -- ============================================================================
+-- TABLE: onboarding_requests
+-- ============================================================================
+-- Stores student and alumni onboarding verification requests
+-- Alumni registration requires admin approval (certificate verification)
+CREATE TABLE onboarding_requests (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    college_id BIGINT NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    type VARCHAR(20) NOT NULL CHECK (type IN ('student', 'alumni')),
+    graduation_year INTEGER,
+    current_year VARCHAR(20),
+    semester VARCHAR(20),
+    degree VARCHAR(100),
+    major VARCHAR(100),
+    current_company VARCHAR(255),
+    current_position VARCHAR(255),
+    linkedin_url VARCHAR(255),
+    bio TEXT,
+    phone VARCHAR(20),
+    certificate_url VARCHAR(500),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    admin_notes TEXT,
+    reviewed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP,
+    professional_type VARCHAR(20) CHECK (professional_type IN ('corporate', 'business', 'freelancer', 'other')),
+    business_name VARCHAR(255),
+    business_type VARCHAR(100),
+    freelancer_skills TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_onboarding_user ON onboarding_requests(user_id);
+CREATE INDEX idx_onboarding_status ON onboarding_requests(status);
+CREATE INDEX idx_onboarding_type ON onboarding_requests(type);
+
+-- ============================================================================
 -- TABLE: system_settings
 -- ============================================================================
 -- Configuration and settings
@@ -521,6 +562,22 @@ CREATE TABLE user_sessions (
 CREATE INDEX idx_sessions_token ON user_sessions(token);
 CREATE INDEX idx_sessions_user ON user_sessions(user_id);
 CREATE INDEX idx_sessions_expires ON user_sessions(expires_at);
+
+-- ============================================================================
+-- TABLE: email_otps
+-- ============================================================================
+-- Stores OTP codes for email verification during registration
+CREATE TABLE email_otps (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp VARCHAR(6) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_email_otps_email ON email_otps(email);
+CREATE INDEX idx_email_otps_expires ON email_otps(expires_at);
 
 -- ============================================================================
 -- TABLE: donation_requests
@@ -738,11 +795,30 @@ CREATE TABLE messages (
     FOREIGN KEY (parent_message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_messages_sender ON messages(sender_id);
-CREATE INDEX idx_messages_recipient ON messages(recipient_id);
-CREATE INDEX idx_messages_mentorship ON messages(mentorship_id);
-CREATE INDEX idx_messages_read ON messages(is_read);
-CREATE INDEX idx_messages_date ON messages(created_at DESC);
+-- ============================================================================
+-- TABLE: conversations
+-- ============================================================================
+-- New table for grouped conversations (chat threads)
+CREATE TABLE conversations (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    title VARCHAR(255),
+    created_by BIGINT NOT NULL,
+    college_id BIGINT NOT NULL,
+    is_archived BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (college_id) REFERENCES colleges(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_conversations_created_by ON conversations(created_by);
+CREATE INDEX idx_conversations_college ON conversations(college_id);
+CREATE INDEX idx_conversations_archived ON conversations(is_archived);
+
+-- Add conversation_id to messages table
+ALTER TABLE messages ADD COLUMN conversation_id BIGINT REFERENCES conversations(id) ON DELETE SET NULL;
+
+CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 
 -- ============================================================================
 -- VIEWS
