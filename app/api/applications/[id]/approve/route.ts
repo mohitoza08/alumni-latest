@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (studentId) {
       await query(
         `UPDATE users 
-         SET status = 'active', updated_at = CURRENT_TIMESTAMP 
+         SET role = 'alumni', status = 'active', onboarding_completed = TRUE, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $1`,
         [studentId],
       )

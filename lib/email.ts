@@ -1,3 +1,5 @@
+const APP_URL = "https://alumni-connect-two-blond.vercel.app"
+
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 async function sendBrevoEmail(to: string, subject: string, htmlContent: string, textContent?: string): Promise<boolean> {
@@ -98,7 +100,7 @@ export async function sendVerificationResultEmail(
             </ul>
           </div>
           <div style="text-align: center; margin: 24px 0;">
-            <a href="https://alumni-connect.com" style="background: #1a1a2e; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+            <a href="${APP_URL}" style="background: #1a1a2e; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
               Go to Dashboard
             </a>
           </div>
