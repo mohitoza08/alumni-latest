@@ -134,7 +134,7 @@ export default function AdminVerificationsPage() {
                               <td className="p-3 text-sm">{r.degree || "-"}</td>
                               <td className="p-3 text-sm">{r.user_role === "student" ? (r.current_year || "-") : (r.graduation_year || "-")}</td>
                               <td className="p-3 text-sm">{r.user_role === "student" ? (r.semester || "-") : "-"}</td>
-                              <td className="p-3">{r.certificate_url ? <a href={r.certificate_url} target="_blank" className="text-blue-600 text-sm hover:underline"><FileText className="h-4 w-4 inline mr-1" />View</a> : <span className="text-muted-foreground text-sm">None</span>}</td>
+                              <td className="p-3">{r.certificate_url && r.certificate_url !== "certificate_stored" ? <a href={r.certificate_url} target="_blank" className="text-blue-600 text-sm hover:underline"><FileText className="h-4 w-4 inline mr-1" />View</a> : r.certificate_url === "certificate_stored" ? <span className="text-xs text-muted-foreground">Stored in DB</span> : <span className="text-muted-foreground text-sm">None</span>}</td>
                               <td className="p-3">
                                 {r.status === "pending" ? (
                                   <Button size="sm" onClick={() => setSelected(r)}>
@@ -181,9 +181,9 @@ export default function AdminVerificationsPage() {
               {selected?.linkedin_url && <div className="col-span-2"><span className="text-muted-foreground">LinkedIn:</span> <a href={selected.linkedin_url} target="_blank" className="text-blue-600 hover:underline">{selected.linkedin_url}</a></div>}
             </div>
             {selected?.certificate_url && (
-              <a href={selected.certificate_url} target="_blank" className="flex items-center gap-2 p-3 bg-muted rounded-lg text-blue-600 hover:underline">
-                <FileText className="h-5 w-5" /> View Certificate
-              </a>
+              selected.certificate_url === "certificate_stored"
+                ? <div className="flex items-center gap-2 p-3 bg-muted rounded-lg text-sm text-muted-foreground"><FileText className="h-5 w-5" /> Certificate stored in database</div>
+                : <a href={selected.certificate_url} target="_blank" className="flex items-center gap-2 p-3 bg-muted rounded-lg text-blue-600 hover:underline"><FileText className="h-5 w-5" /> View Certificate</a>
             )}
             {selected?.bio && (
               <div>
