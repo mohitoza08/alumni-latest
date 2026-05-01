@@ -15,9 +15,9 @@ export async function GET(req: Request) {
     const userStreak = await query(`SELECT * FROM user_streaks WHERE user_id = $1`, [user.id])
 
     const currentStreak = userStreak[0]?.current_streak || 0
-    const longestStreak = userStreak[0]?.max_streak || 0
+    const longestStreak = userStreak[0]?.longest_streak || 0
     const totalPoints = userStreak[0]?.total_points || 0
-    const lastCheckin = userStreak[0]?.last_checkin_date
+    const lastCheckin = userStreak[0]?.last_checkin
 
     // Get average streak across all users
     const avgResult = await query(

@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
     if (achievementType === "streak" || !achievementType) {
       // Get user's current streak
-      const streakResult = await query(`SELECT current_streak, max_streak FROM user_streaks WHERE user_id = $1`, [
+      const streakResult = await query(`SELECT current_streak, longest_streak FROM user_streaks WHERE user_id = $1`, [
         user.id,
       ])
 
@@ -35,17 +35,16 @@ export async function POST(req: Request) {
       for (const milestone of milestones) {
         if (streak >= milestone.days) {
           // Check if user already has this achievement
-          const existingBadge = await query(`SELECT * FROM user_badges WHERE user_id = $1 AND badge_type = $2`, [
+          const existingBadge = await query(`SELECT * FROM user_badges WHERE user_id = $1 AND badge_id = $2`, [
             user.id,
             milestone.badge,
           ])
 
           if (existingBadge.length === 0) {
-            // Award the badge
             await query(
-              `INSERT INTO user_badges (user_id, badge_type, name, points_awarded, unlocked_at)
-               VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
-              [user.id, milestone.badge, milestone.name, milestone.points],
+              `INSERT INTO user_badges (user_id, badge_id, unlocked_at)
+               VALUES ($1, $2, CURRENT_TIMESTAMP)`,
+              [user.id, milestone.badge],
             )
 
             // Update user's total points

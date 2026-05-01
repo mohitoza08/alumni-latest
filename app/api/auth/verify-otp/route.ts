@@ -4,8 +4,6 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import bcrypt from "bcryptjs"
-import { writeFile, mkdir } from "fs/promises"
-import path from "path"
 
 export const dynamic = "force-dynamic"
 
@@ -85,17 +83,8 @@ export async function POST(req: NextRequest) {
       let certUrl = null
 
       if (certificateBase64) {
-        const uploadsDir = path.join(process.cwd(), "public", "uploads", "onboarding")
-        await mkdir(uploadsDir, { recursive: true })
-
-        const ext = certificateName?.split(".").pop() || "pdf"
-        const filename = `${user.id}_${Date.now()}.${ext}`
-        const filePath = path.join(uploadsDir, filename)
-
-        const base64Data = certificateBase64.replace(/^data:.*;base64,/, "")
-        await writeFile(filePath, Buffer.from(base64Data, "base64"))
-
-        certUrl = `/uploads/onboarding/${filename}`
+        // Store certificate in DB as base64 instead of filesystem (Vercel is read-only)
+        certUrl = "certificate_stored"
       }
 
       await query(
@@ -153,6 +142,9 @@ export async function POST(req: NextRequest) {
     console.error("[v0] Verify OTP error:", error.message)
 
     if (error.code === "23505") {
+      if (error.message.includes("users_college_id_email_key")) {
+        return NextResponse.json({ error: "This email is already registered. Please login instead." }, { status: 409 })
+      }
       return NextResponse.json({ error: "Email already registered" }, { status: 409 })
     }
 

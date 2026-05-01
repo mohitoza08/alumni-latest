@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
           [user.id],
         ),
         query(`SELECT COUNT(*) as count FROM community_posts WHERE college_id = $1`, [user.college_id]),
-        query(`SELECT COALESCE(points, 0) as points FROM users WHERE id = $1`, [user.id]),
+        query(`SELECT COALESCE(us.total_points, 0) as total_points FROM user_streaks us WHERE us.user_id = $1`, [user.id]),
       ])
 
       stats.eventsCount = Number(eventsCount[0]?.count || 0)

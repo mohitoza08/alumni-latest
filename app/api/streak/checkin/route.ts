@@ -22,15 +22,15 @@ export async function POST(req: Request) {
     if (existingStreak.length === 0) {
       // Create new streak record
       await query(
-        `INSERT INTO user_streaks (user_id, current_streak, max_streak, last_checkin_date, total_points)
+        `INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_checkin, total_points)
          VALUES ($1, 1, 1, $2, 10)`,
         [user.id, today],
       )
       currentStreak = 1
     } else {
       const streak = existingStreak[0]
-      const lastCheckin = streak.last_checkin_date
-        ? new Date(streak.last_checkin_date).toISOString().split("T")[0]
+      const lastCheckin = streak.last_checkin
+        ? new Date(streak.last_checkin).toISOString().split("T")[0]
         : null
 
       if (lastCheckin === today) {
@@ -43,11 +43,11 @@ export async function POST(req: Request) {
         const isConsecutive = lastCheckin === yesterday
 
         const newStreak = isConsecutive ? streak.current_streak + 1 : 1
-        const newMaxStreak = Math.max(streak.max_streak, newStreak)
+        const newMaxStreak = Math.max(streak.longest_streak, newStreak)
 
         await query(
           `UPDATE user_streaks 
-           SET current_streak = $1, max_streak = $2, last_checkin_date = $3, total_points = total_points + 10
+           SET current_streak = $1, longest_streak = $2, last_checkin = $3, total_points = total_points + 10
            WHERE user_id = $4`,
           [newStreak, newMaxStreak, today, user.id],
         )
