@@ -26,21 +26,34 @@ export async function POST(req: NextRequest) {
     )
 
     if (otpResult.length === 0) {
-      return NextResponse.json({ error: "Invalid OTP" }, { status: 400 })
+      console.log(`[v0] Verify OTP: No OTP found for ${email}`)
+      return NextResponse.json({ error: "Invalid OTP. Please request a new one." }, { status: 400 })
     }
 
     const otpRecord = otpResult[0]
 
     if (otpRecord.used) {
-      return NextResponse.json({ error: "OTP already used" }, { status: 400 })
+      console.log(`[v0] Verify OTP: OTP already used for ${email}`)
+      return NextResponse.json({ error: "OTP already used. Please login instead." }, { status: 400 })
     }
 
     if (new Date(otpRecord.expires_at) < new Date()) {
+      console.log(`[v0] Verify OTP: OTP expired for ${email}, expired at:`, otpRecord.expires_at)
       return NextResponse.json({ error: "OTP expired. Please request a new one." }, { status: 400 })
     }
 
+    console.log(`[v0] Verify OTP: OTP valid for ${email}, checking registration data...`)
+    console.log(`[v0] Verify OTP: firstName=${!!firstName}, lastName=${!!lastName}, password=${!!password}, degree=${!!degree}, major=${!!major}`)
+
     if (!firstName || !lastName || !password || !degree || !major) {
-      return NextResponse.json({ error: "Missing registration data" }, { status: 400 })
+      const missing = []
+      if (!firstName) missing.push("firstName")
+      if (!lastName) missing.push("lastName")
+      if (!password) missing.push("password")
+      if (!degree) missing.push("degree")
+      if (!major) missing.push("major")
+      console.log(`[v0] Verify OTP: Missing fields: ${missing.join(", ")}`)
+      return NextResponse.json({ error: `Missing registration data: ${missing.join(", ")}` }, { status: 400 })
     }
 
     const password_hash = await bcrypt.hash(password, 10)
