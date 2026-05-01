@@ -88,7 +88,7 @@ export default function PortalLogin() {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as Role); setRole(v as Role) }} className="mb-6">
-            <TabsList className="w-full grid grid-cols-2">
+            <TabsList className="w-full grid grid-cols-3">
               <TabsTrigger value="student" className="gap-2">
                 <GraduationCap className="h-4 w-4" />
                 Student
@@ -97,6 +97,10 @@ export default function PortalLogin() {
                 <User className="h-4 w-4" />
                 Alumni
               </TabsTrigger>
+              <TabsTrigger value="admin" className="gap-2">
+                <Shield className="h-4 w-4" />
+                Admin
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="student" className="mt-4">
@@ -104,6 +108,9 @@ export default function PortalLogin() {
             </TabsContent>
             <TabsContent value="alumni" className="mt-4">
               <p className="text-sm text-muted-foreground mb-4">Use your personal email</p>
+            </TabsContent>
+            <TabsContent value="admin" className="mt-4">
+              <p className="text-sm text-muted-foreground mb-4">Admin access only</p>
             </TabsContent>
           </Tabs>
 
