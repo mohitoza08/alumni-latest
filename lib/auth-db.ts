@@ -21,7 +21,7 @@ export interface User {
   current_position?: string
   linkedin_url?: string
   location?: string
-  status: "active" | "inactive" | "pending" | "suspended"
+  status: "active" | "inactive" | "pending" | "suspended" | "rejected"
   email_verified: boolean
   last_login?: Date
   created_at: Date
@@ -89,7 +89,7 @@ export async function authenticateUser(
   }
 
   const result = await query<User & { password_hash: string }>(
-    "SELECT * FROM users WHERE email = $1 AND college_id = $2 AND status = 'active'",
+    "SELECT * FROM users WHERE email = $1 AND college_id = $2",
     [email, college_id],
   )
 

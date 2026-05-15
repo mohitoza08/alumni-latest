@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { email, password, college, role } = body
+    const { email, password, college } = body
 
     const validationErrors: string[] = []
 
@@ -55,29 +55,17 @@ export async function POST(req: NextRequest) {
 
     console.log("[v0] Using collegeId:", collegeId)
 
-    // Check if user exists
-    const userCheck = await query(
-      "SELECT id, email, status FROM users WHERE email = $1 AND college_id = $2",
-      [email, collegeId]
-    )
-    console.log("[v0] User check:", userCheck)
-
-    if (userCheck.length === 0) {
-      console.log("[v0] User not found - need to register first")
-      return NextResponse.json({ error: "User not found with this email and college. Please register first." }, { status: 401 })
-    }
-
-    const userData = userCheck[0]
-    console.log("[v0] User status:", userData.status)
-
     const user = await authenticateUser(email, password, collegeId)
 
     if (!user) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 })
     }
 
-    if (userData.status !== 'active' && userData.status !== 'pending' && userData.status !== 'rejected') {
-      return NextResponse.json({ error: `Account is ${userData.status}. Please contact support.` }, { status: 403 })
+    if (user.status !== 'active') {
+      if (user.status === 'pending' || user.status === 'rejected') {
+        return NextResponse.json({ error: `Your account is ${user.status}. Please wait for admin approval.` }, { status: 403 })
+      }
+      return NextResponse.json({ error: `Account is ${user.status}. Please contact support.` }, { status: 403 })
     }
 
     // Create session
@@ -97,7 +85,7 @@ export async function POST(req: NextRequest) {
     console.log("[v0] Login successful for user:", user.id)
 
     return NextResponse.json({
-      user: { ...user, account_status: userData.status },
+      user: { ...user, account_status: user.status },
       token: session.token,
       message: "Login successful",
     })
