@@ -271,11 +271,13 @@ export function AdminCampaignVerify() {
 
                         <div className="mt-2 flex items-center gap-3 text-xs">
                           <span className="font-mono text-muted-foreground">Ref: {r.transaction_reference}</span>
-                          {r.receipt_url && (
+                          {r.receipt_url && r.receipt_url !== "receipt_stored" ? (
                             <a href={r.receipt_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline">
                               <Eye className="h-3 w-3" /> View Receipt
                             </a>
-                          )}
+                          ) : r.receipt_url === "receipt_stored" ? (
+                            <span className="text-xs text-muted-foreground">Receipt uploaded</span>
+                          ) : null}
                         </div>
 
                         {r.admin_notes && (
