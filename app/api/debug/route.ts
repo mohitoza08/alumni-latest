@@ -5,20 +5,28 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
-    const users = await query("SELECT id, email, status, college_id, role FROM users WHERE email = $1", ["admin@saffrony.ac.in"])
-    const colleges = await query("SELECT id, name FROM colleges LIMIT 5")
-    
+    const tables = await query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables 
+       WHERE table_schema = 'public' 
+       AND table_name IN ('users', 'user_sessions', 'email_otps', 'applications', 'notifications', 'colleges')
+       ORDER BY table_name`
+    )
+
+    const requiredTables = ["users", "user_sessions", "email_otps", "applications", "notifications", "colleges"]
+    const existingTables = tables.map((t) => t.table_name)
+    const missingTables = requiredTables.filter((t) => !existingTables.includes(t))
+
     return NextResponse.json({
       status: "connected",
-      adminUser: users,
-      colleges: colleges,
-      userCount: users.length,
-      collegeCount: colleges.length
+      existingTables,
+      missingTables,
+      allPresent: missingTables.length === 0,
     })
   } catch (error: any) {
     return NextResponse.json({
       status: "error",
-      message: error.message
+      message: error.message,
+      code: error.code,
     }, { status: 500 })
   }
 }

@@ -1,7 +1,3 @@
-import { config } from "dotenv"
-
-config({ path: ".env.local" })
-
 if (!process.env.DATABASE_URL) {
   console.error("❌ DATABASE_URL is not defined!")
 }

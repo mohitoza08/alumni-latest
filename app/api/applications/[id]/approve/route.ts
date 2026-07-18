@@ -58,8 +58,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     console.log("[v0] Application approved and user activated:", studentId)
     return NextResponse.json({ message: "Application approved successfully" })
-  } catch (error) {
+  } catch (error: any) {
     console.error("[v0] Approve application error:", error)
-    return NextResponse.json({ error: "Failed to approve application" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to approve application", details: error.message, code: error.code }, { status: 500 })
   }
 }

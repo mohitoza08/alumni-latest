@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       expires_in: 600,
     })
   } catch (error: any) {
-    console.error("[v0] Register error:", error.message)
-    return NextResponse.json({ error: "Failed to send OTP: " + error.message }, { status: 500 })
+    console.error("[v0] Register error:", error.message, error.code)
+    return NextResponse.json({ error: "Failed to send OTP", details: error.message, code: error.code }, { status: 500 })
   }
 }
